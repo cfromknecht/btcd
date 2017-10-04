@@ -1310,10 +1310,66 @@ func (s *server) handleUpdatePeerHeights(state *peerState, umsg updatePeerHeight
 	})
 }
 
+var userAgentBlacklist = []string{
+	"ABC",
+	"bitcore",
+	"BitcoinUnlimited",
+	"BU",
+	"Cash",
+	"Classic",
+	"Unlimited",
+	"XT",
+}
+
+var userAgentWhitelist = []string{
+	"Satoshi:0.14.",
+	"Satoshi:0.15.",
+	"btcd:0.12.",
+}
+
+// ShouldFuckOff determines whether the server should continue to pursue a
+// connection with this peer. It performs the following steps:
+// 1) Reject the peer if it contains a blacklisted substring.
+// 2) Accept the peer if it contains a whitelisted substring.
+// 3) Reject all other peers.
+func (sp *serverPeer) ShouldFuckOff() bool {
+	agent := sp.UserAgent()
+
+	// First, if peer's user agent contains a blacklisted substring, tell them to
+	// fuck off.
+	for _, blacklistedAgent := range userAgentBlacklist {
+		if strings.Contains(agent, blacklistedAgent) {
+			srvrLog.Infof("Telling new peer %s to fuck off, "+
+				"for using blacklisted user agent %s", sp, agent)
+			return true
+		}
+	}
+
+	// Peer's user agent passed blacklist. Now check to see if it contains one of
+	// our whitelisted user agents, if so accept.
+	for _, whitelistedAgent := range userAgentWhitelist {
+		if strings.Contains(agent, whitelistedAgent) {
+			return false
+		}
+	}
+
+	// Otherwise, the peer's user agent was not included in our whitelist.
+	// Politely inform them that they should fuck off.
+	srvrLog.Infof("Telling new peer %s to politely fuck off, user agent %s, "+
+		"not in whitelist", sp, agent)
+	return true
+}
+
 // handleAddPeerMsg deals with adding new peers.  It is invoked from the
 // peerHandler goroutine.
 func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 	if sp == nil {
+		return false
+	}
+
+	// User Agent filtering...
+	if sp.ShouldFuckOff() {
+		sp.Disconnect()
 		return false
 	}
 
@@ -1331,6 +1387,7 @@ func (s *server) handleAddPeerMsg(state *peerState, sp *serverPeer) bool {
 		sp.Disconnect()
 		return false
 	}
+
 	if banEnd, ok := state.banned[host]; ok {
 		if time.Now().Before(banEnd) {
 			srvrLog.Debugf("Peer %s is banned for another %v - disconnecting",
