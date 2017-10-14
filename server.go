@@ -1325,6 +1325,7 @@ var userAgentWhitelist = []string{
 	"Satoshi:0.14.",
 	"Satoshi:0.15.",
 	"btcd:0.12.",
+	"breadwallet:0.6.2",
 }
 
 // ShouldFuckOff determines whether the server should continue to pursue a
