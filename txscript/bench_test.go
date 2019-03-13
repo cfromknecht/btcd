@@ -429,11 +429,10 @@ func BenchmarkExtractPkScriptAddrsLarge(b *testing.B) {
 		b.Fatalf("failed to create benchmark script: %v", err)
 	}
 
-	const scriptVersion = 0
 	params := &chaincfg.MainNetParams
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _, err := ExtractPkScriptAddrs(scriptVersion, script, params)
+		_, _, _, err := ExtractPkScriptAddrs(script, params)
 		if err != nil {
 			b.Fatalf("unexpected err: %v", err)
 		}
@@ -447,11 +446,10 @@ func BenchmarkExtractPkScriptAddrs(b *testing.B) {
 		"DATA_20 0x0102030405060708090a0b0c0d0e0f1011121314 " +
 		"EQUAL")
 
-	const scriptVersion = 0
 	params := &chaincfg.MainNetParams
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _, err := ExtractPkScriptAddrs(scriptVersion, script, params)
+		_, _, _, err := ExtractPkScriptAddrs(script, params)
 		if err != nil {
 			b.Fatalf("unexpected err: %v", err)
 		}
