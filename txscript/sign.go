@@ -71,6 +71,10 @@ func WitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int, amt int64
 
 // RawTxInSignature returns the serialized ECDSA signature for the input idx of
 // the given transaction, with hashType appended to it.
+//
+// NOTE: This function is only valid for version 0 scripts.  Since the function
+// does not accept a script version, the results are undefined for other script
+// versions.
 func RawTxInSignature(tx *wire.MsgTx, idx int, subScript []byte,
 	hashType SigHashType, key *btcec.PrivateKey) ([]byte, error) {
 
