@@ -310,7 +310,19 @@ func isNullData(pops []parsedOpcode) bool {
 
 // scriptType returns the type of the script being inspected from the known
 // standard types.
-func typeOfScript(pops []parsedOpcode) ScriptClass {
+//
+// NOTE:  All scripts that are not version 0 are currently considered non
+// standard.
+func typeOfScript(scriptVersion uint16, script []byte) ScriptClass {
+	if scriptVersion != 0 {
+		return NonStandardTy
+	}
+
+	pops, err := parseScript(script)
+	if err != nil {
+		return NonStandardTy
+	}
+
 	if isPubkey(pops) {
 		return PubKeyTy
 	} else if isPubkeyHash(pops) {
@@ -333,11 +345,8 @@ func typeOfScript(pops []parsedOpcode) ScriptClass {
 //
 // NonStandardTy will be returned when the script does not parse.
 func GetScriptClass(script []byte) ScriptClass {
-	pops, err := parseScript(script)
-	if err != nil {
-		return NonStandardTy
-	}
-	return typeOfScript(pops)
+	const scriptVersion = 0
+	return typeOfScript(scriptVersion, script)
 }
 
 // expectedInputs returns the number of arguments required by a script.
@@ -404,8 +413,16 @@ type ScriptInfo struct {
 // pair.  It will error if the pair is in someway invalid such that they can not
 // be analysed, i.e. if they do not parse or the pkScript is not a push-only
 // script
+//
+// NOTE: This function is only valid for version 0 scripts.  Since the function
+// does not accept a script version, the results are undefined for other script
+// versions.
+//
+// DEPRECATED.  This will be removed in the next major version bump.
 func CalcScriptInfo(sigScript, pkScript []byte, witness wire.TxWitness,
 	bip16, segwit bool) (*ScriptInfo, error) {
+
+	const scriptVersion = 0
 
 	sigPops, err := parseScript(sigScript)
 	if err != nil {
@@ -417,9 +434,8 @@ func CalcScriptInfo(sigScript, pkScript []byte, witness wire.TxWitness,
 		return nil, err
 	}
 
-	// Push only sigScript makes little sense.
 	si := new(ScriptInfo)
-	si.PkScriptClass = typeOfScript(pkPops)
+	si.PkScriptClass = typeOfScript(scriptVersion, pkScript)
 
 	// Can't have a signature script that doesn't just push data.
 	if !isPushOnly(sigPops) {
@@ -440,7 +456,8 @@ func CalcScriptInfo(sigScript, pkScript []byte, witness wire.TxWitness,
 			return nil, err
 		}
 
-		shInputs := expectedInputs(shPops, typeOfScript(shPops))
+		redeemClass := typeOfScript(scriptVersion, pkScript)
+		shInputs := expectedInputs(shPops, redeemClass)
 		if shInputs == -1 {
 			si.ExpectedInputs = -1
 		} else {
@@ -467,7 +484,9 @@ func CalcScriptInfo(sigScript, pkScript []byte, witness wire.TxWitness,
 		// Extract the pushed witness program from the sigScript so we
 		// can determine the number of expected inputs.
 		pkPops, _ := parseScript(sigScript[1:])
-		shInputs := expectedInputs(pkPops, typeOfScript(pkPops))
+
+		redeemClass := typeOfScript(scriptVersion, pkScript)
+		shInputs := expectedInputs(pkPops, redeemClass)
 		if shInputs == -1 {
 			si.ExpectedInputs = -1
 		} else {
@@ -487,7 +506,8 @@ func CalcScriptInfo(sigScript, pkScript []byte, witness wire.TxWitness,
 		witnessScript := witness[len(witness)-1]
 		pops, _ := parseScript(witnessScript)
 
-		shInputs := expectedInputs(pops, typeOfScript(pops))
+		redeemClass := typeOfScript(scriptVersion, pkScript)
+		shInputs := expectedInputs(pops, redeemClass)
 		if shInputs == -1 {
 			si.ExpectedInputs = -1
 		} else {
@@ -684,7 +704,9 @@ func ExtractPkScriptAddrs(pkScript []byte, chainParams *chaincfg.Params) (Script
 		return NonStandardTy, nil, 0, err
 	}
 
-	scriptClass := typeOfScript(pops)
+	const scriptVersion = 0
+	scriptClass := typeOfScript(scriptVersion, pkScript)
+
 	switch scriptClass {
 	case PubKeyHashTy:
 		// A pay-to-pubkey-hash script is of the form:
