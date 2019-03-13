@@ -299,6 +299,30 @@ func isPubKeyScript(script []byte) bool {
 	return extractPubKey(script) != nil
 }
 
+// extractPubKeyHash extracts the public key hash from the passed script if it
+// is a standard pay-to-pubkey-hash script.  It will return nil otherwise.
+func extractPubKeyHash(script []byte) []byte {
+	// A pay-to-pubkey-hash script is of the form:
+	//  OP_DUP OP_HASH160 <20-byte hash> OP_EQUALVERIFY OP_CHECKSIG
+	if len(script) == 25 &&
+		script[0] == OP_DUP &&
+		script[1] == OP_HASH160 &&
+		script[2] == OP_DATA_20 &&
+		script[23] == OP_EQUALVERIFY &&
+		script[24] == OP_CHECKSIG {
+
+		return script[3:23]
+	}
+
+	return nil
+}
+
+// isPubKeyHashScript returns whether or not the passed script is a standard
+// pay-to-pubkey-hash script.
+func isPubKeyHashScript(script []byte) bool {
+	return extractPubKeyHash(script) != nil
+}
+
 // isNullData returns true if the passed script is a null data transaction,
 // false otherwise.
 func isNullData(pops []parsedOpcode) bool {
@@ -330,6 +354,8 @@ func typeOfScript(scriptVersion uint16, script []byte) ScriptClass {
 	switch {
 	case isPubKeyScript(script):
 		return PubKeyTy
+	case isPubKeyHashScript(script):
+		return PubKeyHashTy
 	case isScriptHashScript(script):
 		return ScriptHashTy
 	case isMultisigScript(scriptVersion, script):
@@ -341,9 +367,7 @@ func typeOfScript(scriptVersion uint16, script []byte) ScriptClass {
 		return NonStandardTy
 	}
 
-	if isPubkeyHash(pops) {
-		return PubKeyHashTy
-	} else if isWitnessPubKeyHash(pops) {
+	if isWitnessPubKeyHash(pops) {
 		return WitnessV0PubKeyHashTy
 	} else if isWitnessScriptHash(pops) {
 		return WitnessV0ScriptHashTy
