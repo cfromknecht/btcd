@@ -262,3 +262,17 @@ func BenchmarkIsPushOnlyScript(b *testing.B) {
 		_ = IsPushOnlyScript(script)
 	}
 }
+
+// BenchmarkGetScriptClass benchmarks how long it takes GetScriptClass to
+// analyze a very large script.
+func BenchmarkGetScriptClass(b *testing.B) {
+	script, err := genComplexScript()
+	if err != nil {
+		b.Fatalf("failed to create benchmark script: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = GetScriptClass(script)
+	}
+}
