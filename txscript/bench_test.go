@@ -349,3 +349,20 @@ func BenchmarkIsWitnessScriptHash(b *testing.B) {
 		_ = IsPayToWitnessScriptHash(script)
 	}
 }
+
+// BenchmarkPushedData benchmarks how long it takes to extract the pushed data
+// from a very large script.
+func BenchmarkPushedData(b *testing.B) {
+	script, err := genComplexScript()
+	if err != nil {
+		b.Fatalf("failed to create benchmark script: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := PushedData(script)
+		if err != nil {
+			b.Fatalf("unexpected err: %v", err)
+		}
+	}
+}
