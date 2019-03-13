@@ -1990,7 +1990,7 @@ func opcodeCheckSig(op *parsedOpcode, vm *Engine) error {
 	} else {
 		// Remove the signature since there is no way for a signature
 		// to sign itself.
-		subScript = removeOpcodeByDataRaw(subScript, fullSigBytes)
+		subScript = removeOpcodeByData(subScript, fullSigBytes)
 
 		hash = calcSignatureHashRaw(subScript, hashType, &vm.tx, vm.txIdx)
 	}
@@ -2163,7 +2163,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 	// no way for a signature to sign itself.
 	if !vm.isWitnessVersionActive(0) {
 		for _, sigInfo := range signatures {
-			script = removeOpcodeByDataRaw(script, sigInfo.signature)
+			script = removeOpcodeByData(script, sigInfo.signature)
 		}
 	}
 
