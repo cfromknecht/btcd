@@ -378,15 +378,14 @@ func (vm *Engine) executeOpcode(op *opcode, data []byte) error {
 	// Ensure all executed data push opcodes use the minimal encoding when
 	// the minimal data verification flag is set.
 	if vm.dstack.verifyMinimalData && vm.isBranchExecuting() &&
-		pop.opcode.value >= 0 && pop.opcode.value <= OP_PUSHDATA4 {
+		op.value >= 0 && op.value <= OP_PUSHDATA4 {
 
 		if err := checkMinimalDataPush(op, data); err != nil {
 			return err
 		}
 	}
 
-	pop := parsedOpcode{opcode: op, data: data}
-	return op.opfunc(&pop, vm)
+	return op.opfunc(op, data, vm)
 }
 
 // checkValidPC returns an error if the current script position is not valid for
