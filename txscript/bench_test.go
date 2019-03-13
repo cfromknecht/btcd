@@ -290,3 +290,18 @@ func BenchmarkIsPubKeyScript(b *testing.B) {
 		_ = isPubKeyScript(script)
 	}
 }
+
+// BenchmarkIsPubKeyHashScript benchmarks how long it takes to analyze a very
+// large script to determine if it is a standard pay-to-pubkey-hash script.
+func BenchmarkIsPubKeyHashScript(b *testing.B) {
+	script, err := genComplexScript()
+	if err != nil {
+		b.Fatalf("failed to create benchmark script: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pops, _ := parseScript(script)
+		_ = isPubkeyHash(pops)
+	}
+}
