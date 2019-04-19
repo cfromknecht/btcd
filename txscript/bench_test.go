@@ -331,7 +331,6 @@ func BenchmarkIsWitnessPubKeyHash(b *testing.B) {
 	const scriptVersion = 0
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pops, _ := parseScript(script)
-		_ = isWitnessPubKeyHash(pops)
+		_ = IsPayToWitnessPubKeyHash(script)
 	}
 }
