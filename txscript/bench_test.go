@@ -334,3 +334,19 @@ func BenchmarkIsWitnessPubKeyHash(b *testing.B) {
 		_ = IsPayToWitnessPubKeyHash(script)
 	}
 }
+
+// BenchmarkIsWitnessScriptHash benchmarks how long it takes to analyze a very
+// large script to determine if it is a standard witness script hash script.
+func BenchmarkIsWitnessScriptHash(b *testing.B) {
+	script, err := genComplexScript()
+	if err != nil {
+		b.Fatalf("failed to create benchmark script: %v", err)
+	}
+
+	const scriptVersion = 0
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pops, _ := parseScript(script)
+		_ = isWitnessScriptHash(pops)
+	}
+}
