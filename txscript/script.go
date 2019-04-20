@@ -184,20 +184,7 @@ func isWitnessProgramScript(script []byte) bool {
 // witness program must be a small integer (from 0-16), followed by 2-40 bytes
 // of pushed data.
 func IsWitnessProgram(script []byte) bool {
-	// The length of the script must be between 4 and 42 bytes. The
-	// smallest program is the witness version, followed by a data push of
-	// 2 bytes.  The largest allowed witness program has a data push of
-	// 40-bytes.
-	if len(script) < 4 || len(script) > 42 {
-		return false
-	}
-
-	pops, err := parseScript(script)
-	if err != nil {
-		return false
-	}
-
-	return isWitnessProgram(pops)
+	return isWitnessProgramScript(script)
 }
 
 // isWitnessProgram returns true if the passed script is a witness program, and
