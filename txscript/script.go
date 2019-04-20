@@ -126,14 +126,6 @@ func extractWitnessPubKeyHash(script []byte) []byte {
 	return nil
 }
 
-// isWitnessPubKeyHash returns true if the passed script is a
-// pay-to-witness-pubkey-hash, and false otherwise.
-func isWitnessPubKeyHash(pops []parsedOpcode) bool {
-	return len(pops) == 2 &&
-		pops[0].opcode.value == OP_0 &&
-		pops[1].opcode.value == OP_DATA_20
-}
-
 // isWitnessProgramScript returns true if the passed script is a witness
 // program, and false otherwise. A witness program MUST adhere to the following
 // constraints: there must be exactly two pops (program version and the program
