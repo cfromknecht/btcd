@@ -150,9 +150,14 @@ func isWitnessPubKeyHash(pops []parsedOpcode) bool {
 // does not accept a script version, the results are undefined for other script
 // versions.
 func isWitnessProgramScript(script []byte) bool {
+	_, _, valid := extractWitnessProgramInfo(script)
+	return valid
+}
+
+func extractWitnessProgramInfo(script []byte) (int, []byte, bool) {
 	// Skip parsing if we know the program is invalid based on size.
 	if len(script) < 4 || len(script) > 42 {
-		return false
+		return 0, nil, false
 	}
 
 	const scriptVersion = 0
@@ -162,8 +167,9 @@ func isWitnessProgramScript(script []byte) bool {
 	if !tokenizer.Next() ||
 		!isSmallInt(tokenizer.Opcode()) {
 
-		return false
+		return 0, nil, false
 	}
+	version := asSmallInt(tokenizer.Opcode())
 
 	// The second opcode must be a canonical data push, the length of the
 	// data push is bounded to 40 by the initial check on overall script
@@ -171,12 +177,15 @@ func isWitnessProgramScript(script []byte) bool {
 	if !tokenizer.Next() ||
 		!isCanonicalPush(tokenizer.Opcode(), tokenizer.Data()) {
 
-		return false
+		return 0, nil, false
 	}
+	program := tokenizer.Data()
 
 	// The witness program is valid if there are no more opcodes, and we
 	// terminated without a parsing error.
-	return tokenizer.Done() && tokenizer.Err() == nil
+	valid := tokenizer.Done() && tokenizer.Err() == nil
+
+	return version, program, valid
 }
 
 // IsWitnessProgram returns true if the passed script is a valid witness
