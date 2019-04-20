@@ -134,6 +134,51 @@ func isWitnessPubKeyHash(pops []parsedOpcode) bool {
 		pops[1].opcode.value == OP_DATA_20
 }
 
+// isWitnessProgramScript returns true if the passed script is a witness
+// program, and false otherwise. A witness program MUST adhere to the following
+// constraints: there must be exactly two pops (program version and the program
+// itself), the first opcode MUST be a small integer (0-16), the push data MUST
+// be canonical, and finally the size of the push data must be between 2 and 40
+// bytes.
+//
+// The length of the script must be between 4 and 42 bytes. The
+// smallest program is the witness version, followed by a data push of
+// 2 bytes.  The largest allowed witness program has a data push of
+// 40-bytes.
+//
+// NOTE: This function is only valid for version 0 scripts.  Since the function
+// does not accept a script version, the results are undefined for other script
+// versions.
+func isWitnessProgramScript(script []byte) bool {
+	// Skip parsing if we know the program is invalid based on size.
+	if len(script) < 4 || len(script) > 42 {
+		return false
+	}
+
+	const scriptVersion = 0
+	tokenizer := MakeScriptTokenizer(scriptVersion, script)
+
+	// The first opcode must be a small int.
+	if !tokenizer.Next() ||
+		!isSmallInt(tokenizer.Opcode()) {
+
+		return false
+	}
+
+	// The second opcode must be a canonical data push, the length of the
+	// data push is bounded to 40 by the initial check on overall script
+	// length.
+	if !tokenizer.Next() ||
+		!isCanonicalPush(tokenizer.Opcode(), tokenizer.Data()) {
+
+		return false
+	}
+
+	// The witness program is valid if there are no more opcodes, and we
+	// terminated without a parsing error.
+	return tokenizer.Done() && tokenizer.Err() == nil
+}
+
 // IsWitnessProgram returns true if the passed script is a valid witness
 // program which is encoded according to the passed witness program version. A
 // witness program must be a small integer (from 0-16), followed by 2-40 bytes
@@ -161,6 +206,8 @@ func IsWitnessProgram(script []byte) bool {
 // first opcode MUST be a small integer (0-16), the push data MUST be
 // canonical, and finally the size of the push data must be between 2 and 40
 // bytes.
+//
+// DEPRECATED: Use isWitnessProgramScript instead.
 func isWitnessProgram(pops []parsedOpcode) bool {
 	return len(pops) == 2 &&
 		isSmallInt(pops[0].opcode.value) &&
