@@ -463,8 +463,9 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	sm.clearRequestedState(state)
 
 	if peer == sm.syncPeer {
-		// Update the sync peer and disconnect our current sync peer.
-		sm.updateSyncPeer(true)
+		// Update the sync peer. The server has already disconnected the
+		// peer before signaling to the sync manager.
+		sm.updateSyncPeer(false)
 	}
 }
 
