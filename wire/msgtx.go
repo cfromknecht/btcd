@@ -409,14 +409,18 @@ func (msg *MsgTx) Copy() *MsgTx {
 // See Deserialize for decoding transactions stored to disk, such as in a
 // database, as opposed to decoding transactions from the wire.
 func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
+	buf := binarySerializer.Borrow()
+
 	version, err := binarySerializer.Uint32(r, littleEndian)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 	msg.Version = int32(version)
 
-	count, err := ReadVarInt(r, pver)
+	count, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
@@ -426,20 +430,23 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	if count == 0 && enc == WitnessEncoding {
 		// Next, we need to read the flag, which is a single byte.
 		if _, err = io.ReadFull(r, flag[:]); err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 
 		// At the moment, the flag MUST be 0x01. In the future other
 		// flag types may be supported.
 		if flag[0] != 0x01 {
+			binarySerializer.Return(buf)
 			str := fmt.Sprintf("witness tx but flag byte is %x", flag)
 			return messageError("MsgTx.BtcDecode", str)
 		}
 
 		// With the Segregated Witness specific fields decoded, we can
 		// now read in the actual txin count.
-		count, err = ReadVarInt(r, pver)
+		count, err = ReadVarIntBuf(r, pver, buf)
 		if err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
@@ -448,6 +455,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
 	if count > uint64(maxTxInPerMessage) {
+		binarySerializer.Return(buf)
 		str := fmt.Sprintf("too many input transactions to fit into "+
 			"max message size [count %d, max %d]", count,
 			maxTxInPerMessage)
@@ -494,14 +502,16 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		msg.TxIn[i] = ti
 		err = readTxIn(r, pver, msg.Version, ti)
 		if err != nil {
+			binarySerializer.Return(buf)
 			returnScriptBuffers()
 			return err
 		}
 		totalScriptSize += uint64(len(ti.SignatureScript))
 	}
 
-	count, err = ReadVarInt(r, pver)
+	count, err = ReadVarIntBuf(r, pver, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		returnScriptBuffers()
 		return err
 	}
@@ -510,6 +520,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
 	if count > uint64(maxTxOutPerMessage) {
+		binarySerializer.Return(buf)
 		returnScriptBuffers()
 		str := fmt.Sprintf("too many output transactions to fit into "+
 			"max message size [count %d, max %d]", count,
@@ -527,6 +538,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		msg.TxOut[i] = to
 		err = readTxOut(r, pver, msg.Version, to)
 		if err != nil {
+			binarySerializer.Return(buf)
 			returnScriptBuffers()
 			return err
 		}
@@ -540,8 +552,9 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 			// For each input, the witness is encoded as a stack
 			// with one or more items. Therefore, we first read a
 			// varint which encodes the number of stack items.
-			witCount, err := ReadVarInt(r, pver)
+			witCount, err := ReadVarIntBuf(r, pver, buf)
 			if err != nil {
+				binarySerializer.Return(buf)
 				returnScriptBuffers()
 				return err
 			}
@@ -549,6 +562,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 			// Prevent a possible memory exhaustion attack by
 			// limiting the witCount value to a sane upper bound.
 			if witCount > maxWitnessItemsPerInput {
+				binarySerializer.Return(buf)
 				returnScriptBuffers()
 				str := fmt.Sprintf("too many witness items to fit "+
 					"into max message size [count %d, max %d]",
@@ -564,6 +578,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 				txin.Witness[j], err = readScript(r, pver,
 					maxWitnessItemSize, "script witness item")
 				if err != nil {
+					binarySerializer.Return(buf)
 					returnScriptBuffers()
 					return err
 				}
@@ -574,6 +589,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 
 	msg.LockTime, err = binarySerializer.Uint32(r, littleEndian)
 	if err != nil {
+		binarySerializer.Return(buf)
 		returnScriptBuffers()
 		return err
 	}
@@ -646,6 +662,8 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		scriptPool.Return(pkScript)
 	}
 
+	binarySerializer.Return(buf)
+
 	return nil
 }
 
@@ -679,8 +697,11 @@ func (msg *MsgTx) DeserializeNoWitness(r io.Reader) error {
 // See Serialize for encoding transactions to be stored to disk, such as in a
 // database, as opposed to encoding transactions for the wire.
 func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
+	buf := binarySerializer.Borrow()
+
 	err := binarySerializer.PutUint32(w, littleEndian, uint32(msg.Version))
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
@@ -698,32 +719,37 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 		// which at the moment is always 0x01, but may be extended in
 		// the future to accommodate auxiliary non-committed fields.
 		if _, err := w.Write(witessMarkerBytes); err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
 
 	count := uint64(len(msg.TxIn))
-	err = WriteVarInt(w, pver, count)
+	err = WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
 	for _, ti := range msg.TxIn {
 		err = writeTxIn(w, pver, msg.Version, ti)
 		if err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
 
 	count = uint64(len(msg.TxOut))
-	err = WriteVarInt(w, pver, count)
+	err = WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
 	for _, to := range msg.TxOut {
 		err = WriteTxOut(w, pver, msg.Version, to)
 		if err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
@@ -735,12 +761,15 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 		for _, ti := range msg.TxIn {
 			err = writeTxWitness(w, pver, msg.Version, ti.Witness)
 			if err != nil {
+				binarySerializer.Return(buf)
 				return err
 			}
 		}
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, msg.LockTime)
+	err = binarySerializer.PutUint32(w, littleEndian, msg.LockTime)
+	binarySerializer.Return(buf)
+	return err
 }
 
 // HasWitness returns false if none of the inputs within the transaction
