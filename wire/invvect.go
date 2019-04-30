@@ -77,10 +77,51 @@ func NewInvVect(typ InvType, hash *chainhash.Hash) *InvVect {
 // readInvVect reads an encoded InvVect from r depending on the protocol
 // version.
 func readInvVect(r io.Reader, pver uint32, iv *InvVect) error {
-	return readElements(r, &iv.Type, &iv.Hash)
+	return readInvVectBuf(r, pver, iv, nil)
+}
+func readInvVectBuf(r io.Reader, pver uint32, iv *InvVect, b []byte) error {
+	buf := b
+	if buf == nil {
+		buf = binarySerializer.Borrow()[:4]
+	}
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		if b == nil {
+			binarySerializer.Return(buf)
+		}
+		return err
+	}
+	iv.Type = InvType(littleEndian.Uint32(buf[:4]))
+
+	if b == nil {
+		binarySerializer.Return(buf)
+	}
+
+	if _, err := io.ReadFull(r, iv.Hash[:]); err != nil {
+		return err
+	}
+	return nil
 }
 
 // writeInvVect serializes an InvVect to w depending on the protocol version.
 func writeInvVect(w io.Writer, pver uint32, iv *InvVect) error {
-	return writeElements(w, iv.Type, &iv.Hash)
+	return writeInvVectBuf(w, pver, iv, nil)
+}
+
+func writeInvVectBuf(w io.Writer, pver uint32, iv *InvVect, b []byte) error {
+	buf := b
+	if buf == nil {
+		buf = binarySerializer.Borrow()[:4]
+	}
+
+	littleEndian.PutUint32(buf[:4], uint32(iv.Type))
+	_, err := w.Write(buf[:4])
+	if b == nil {
+		binarySerializer.Return(buf)
+	}
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(iv.Hash[:])
+	return err
 }

@@ -114,15 +114,86 @@ func NewBlockHeader(version int32, prevHash, merkleRootHash *chainhash.Hash,
 // decoding block headers stored to disk, such as in a database, as opposed to
 // decoding from the wire.
 func readBlockHeader(r io.Reader, pver uint32, bh *BlockHeader) error {
-	return readElements(r, &bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		(*uint32Time)(&bh.Timestamp), &bh.Bits, &bh.Nonce)
+	buf := binarySerializer.Borrow()[:8]
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+	bh.Version = int32(littleEndian.Uint32(buf[:4]))
+
+	if _, err := io.ReadFull(r, bh.PrevBlock[:]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	if _, err := io.ReadFull(r, bh.MerkleRoot[:]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+	bh.Timestamp = time.Unix(int64(littleEndian.Uint32(buf[:4])), 0)
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+	bh.Bits = littleEndian.Uint32(buf[:4])
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+	bh.Nonce = littleEndian.Uint32(buf[:4])
+
+	binarySerializer.Return(buf)
+
+	return nil
 }
 
 // writeBlockHeader writes a bitcoin block header to w.  See Serialize for
 // encoding block headers to be stored to disk, such as in a database, as
 // opposed to encoding for the wire.
 func writeBlockHeader(w io.Writer, pver uint32, bh *BlockHeader) error {
-	sec := uint32(bh.Timestamp.Unix())
-	return writeElements(w, bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		sec, bh.Bits, bh.Nonce)
+	buf := binarySerializer.Borrow()[:8]
+	littleEndian.PutUint32(buf[:4], uint32(bh.Version))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	if _, err := w.Write(bh.PrevBlock[:]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	if _, err := w.Write(bh.MerkleRoot[:]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], uint32(bh.Timestamp.Unix()))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], bh.Bits)
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], bh.Nonce)
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	binarySerializer.Return(buf)
+
+	return nil
 }
