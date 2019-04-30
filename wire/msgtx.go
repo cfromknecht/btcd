@@ -1042,19 +1042,44 @@ func readScriptBuf(r io.Reader, pver uint32, b []byte, maxAllowed uint32, fieldN
 
 // readTxIn reads the next sequence of bytes from r as a transaction input
 // (TxIn).
+//
+// DEPRECATED: Use readTxInBuf instead.
 func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
-	err := readOutPoint(r, pver, version, &ti.PreviousOutPoint)
+	return readTxInBuf(r, pver, version, ti, nil)
+}
+
+// readTxInBuf reads the next sequence of bytes from r as a transaction input
+// (TxIn).
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func readTxInBuf(r io.Reader, pver uint32, version int32, ti *TxIn, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	err := readOutPointBuf(r, pver, version, &ti.PreviousOutPoint, buf)
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
-	ti.SignatureScript, err = readScript(r, pver, MaxMessagePayload,
+	ti.SignatureScript, err = readScriptBuf(r, pver, buf, MaxMessagePayload,
 		"transaction input signature script")
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
-	return readElement(r, &ti.Sequence)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	ti.Sequence = littleEndian.Uint32(buf[:4])
+	binarySerializer.maybeReturn(b, buf)
+
+	return nil
 }
 
 // writeTxIn encodes ti to the bitcoin protocol encoding for a transaction
