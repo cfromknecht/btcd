@@ -927,25 +927,65 @@ func NewMsgTx(version int32) *MsgTx {
 }
 
 // readOutPoint reads the next sequence of bytes from r as an OutPoint.
+//
+// DEPRECATED: Use readOutPointBuf instead.
 func readOutPoint(r io.Reader, pver uint32, version int32, op *OutPoint) error {
+	return readOutPointBuf(r, pver, version, op, nil)
+}
+
+// readOutPointBuf reads the next sequence of bytes from r as an OutPoint.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func readOutPointBuf(r io.Reader, pver uint32, version int32, op *OutPoint, b []byte) error {
 	_, err := io.ReadFull(r, op.Hash[:])
 	if err != nil {
 		return err
 	}
 
-	op.Index, err = binarySerializer.Uint32(r, littleEndian)
-	return err
+	buf := binarySerializer.maybeBorrow(b)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	op.Index = littleEndian.Uint32(buf[:4])
+
+	binarySerializer.maybeReturn(b, buf)
+
+	return nil
 }
 
 // writeOutPoint encodes op to the bitcoin protocol encoding for an OutPoint
 // to w.
+//
+// DEPRECATED: Use writeOutPointBuf instead.
 func writeOutPoint(w io.Writer, pver uint32, version int32, op *OutPoint) error {
+	return writeOutPointBuf(w, pver, version, op, nil)
+}
+
+// writeOutPoint encodes op to the bitcoin protocol encoding for an OutPoint
+// to w.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func writeOutPointBuf(w io.Writer, pver uint32, version int32, op *OutPoint, b []byte) error {
 	_, err := w.Write(op.Hash[:])
 	if err != nil {
 		return err
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, op.Index)
+	buf := binarySerializer.maybeBorrow(b)
+	littleEndian.PutUint32(buf[:4], op.Index)
+	_, err = w.Write(buf[:4])
+	binarySerializer.maybeReturn(b, buf)
+
+	return err
 }
 
 // readScript reads a variable length byte array that represents a transaction
