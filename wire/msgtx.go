@@ -1039,17 +1039,32 @@ func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
 // writeTxIn encodes ti to the bitcoin protocol encoding for a transaction
 // input (TxIn) to w.
 func writeTxIn(w io.Writer, pver uint32, version int32, ti *TxIn) error {
-	err := writeOutPoint(w, pver, version, &ti.PreviousOutPoint)
+	return writeTxInBuf(w, pver, version, ti, nil)
+}
+
+// writeTxInBuf encodes ti to the bitcoin protocol encoding for a transaction
+// input (TxIn) to w. If b is non-nil, the provided buffer will be used for
+// serializing small values. Otherwise a buffer will be drawn from the
+// binarySerializer's pool and return when the method finishes.
+func writeTxInBuf(w io.Writer, pver uint32, version int32, ti *TxIn, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	err := writeOutPointBuf(w, pver, version, &ti.PreviousOutPoint, buf)
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
-	err = WriteVarBytes(w, pver, ti.SignatureScript)
+	err = WriteVarBytesBuf(w, pver, ti.SignatureScript, buf)
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, ti.Sequence)
+	littleEndian.PutUint32(buf[:4], ti.Sequence)
+	_, err = w.Write(buf[:4])
+	binarySerializer.maybeReturn(b, buf)
+
+	return err
 }
 
 // readTxOut reads the next sequence of bytes from r as a transaction output
