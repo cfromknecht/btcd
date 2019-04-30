@@ -679,8 +679,11 @@ func (msg *MsgTx) DeserializeNoWitness(r io.Reader) error {
 // See Serialize for encoding transactions to be stored to disk, such as in a
 // database, as opposed to encoding transactions for the wire.
 func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	err := binarySerializer.PutUint32(w, littleEndian, uint32(msg.Version))
-	if err != nil {
+	buf := binarySerializer.Borrow()[:8]
+
+	littleEndian.PutUint32(buf[:4], uint32(msg.Version))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
@@ -698,32 +701,37 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 		// which at the moment is always 0x01, but may be extended in
 		// the future to accommodate auxiliary non-committed fields.
 		if _, err := w.Write(witessMarkerBytes); err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
 
 	count := uint64(len(msg.TxIn))
-	err = WriteVarInt(w, pver, count)
+	err := WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
 	for _, ti := range msg.TxIn {
-		err = writeTxIn(w, pver, msg.Version, ti)
+		err = writeTxInBuf(w, pver, msg.Version, ti, buf)
 		if err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
 
 	count = uint64(len(msg.TxOut))
-	err = WriteVarInt(w, pver, count)
+	err = WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
+		binarySerializer.Return(buf)
 		return err
 	}
 
 	for _, to := range msg.TxOut {
-		err = WriteTxOut(w, pver, msg.Version, to)
+		err = WriteTxOutBuf(w, pver, msg.Version, to, buf)
 		if err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
 	}
@@ -733,14 +741,23 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 	// within the transaction.
 	if doWitness {
 		for _, ti := range msg.TxIn {
-			err = writeTxWitness(w, pver, msg.Version, ti.Witness)
+			err = writeTxWitnessBuf(w, pver, msg.Version, ti.Witness, buf)
 			if err != nil {
+				binarySerializer.Return(buf)
 				return err
 			}
 		}
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, msg.LockTime)
+	littleEndian.PutUint32(buf[:4], msg.LockTime)
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.Return(buf)
+		return err
+	}
+
+	binarySerializer.Return(buf)
+
+	return nil
 }
 
 // HasWitness returns false if none of the inputs within the transaction
@@ -970,6 +987,10 @@ func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
 // writeTxIn encodes ti to the bitcoin protocol encoding for a transaction
 // input (TxIn) to w.
 func writeTxIn(w io.Writer, pver uint32, version int32, ti *TxIn) error {
+	return writeTxInBuf(w, pver, version, ti, nil)
+}
+
+func writeTxInBuf(w io.Writer, pver uint32, version int32, ti *TxIn, b []byte) error {
 	err := writeOutPoint(w, pver, version, &ti.PreviousOutPoint)
 	if err != nil {
 		return err
@@ -980,7 +1001,20 @@ func writeTxIn(w io.Writer, pver uint32, version int32, ti *TxIn) error {
 		return err
 	}
 
-	return binarySerializer.PutUint32(w, littleEndian, ti.Sequence)
+	buf := b
+	if b == nil {
+		buf = binarySerializer.Borrow()[:8]
+	}
+
+	littleEndian.PutUint32(buf[:4], ti.Sequence)
+
+	_, err = w.Write(buf)
+
+	if b == nil {
+		binarySerializer.Return(buf)
+	}
+
+	return err
 }
 
 // readTxOut reads the next sequence of bytes from r as a transaction output
@@ -1002,26 +1036,61 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) error {
 // NOTE: This function is exported in order to allow txscript to compute the
 // new sighashes for witness transactions (BIP0143).
 func WriteTxOut(w io.Writer, pver uint32, version int32, to *TxOut) error {
-	err := binarySerializer.PutUint64(w, littleEndian, uint64(to.Value))
+	return WriteTxOutBuf(w, pver, version, to, nil)
+}
+
+func WriteTxOutBuf(w io.Writer, pver uint32, version int32, to *TxOut, b []byte) error {
+	buf := b
+	if buf == nil {
+		buf = binarySerializer.Borrow()[:8]
+	}
+
+	littleEndian.PutUint64(buf[:8], uint64(to.Value))
+	_, err := w.Write(buf)
 	if err != nil {
+		if b == nil {
+			binarySerializer.Return(buf)
+		}
 		return err
 	}
 
-	return WriteVarBytes(w, pver, to.PkScript)
+	err = WriteVarBytesBuf(w, pver, to.PkScript, buf)
+	if b == nil {
+		binarySerializer.Return(buf)
+	}
+	return err
 }
 
 // writeTxWitness encodes the bitcoin protocol encoding for a transaction
 // input's witness into to w.
 func writeTxWitness(w io.Writer, pver uint32, version int32, wit [][]byte) error {
-	err := WriteVarInt(w, pver, uint64(len(wit)))
+	return writeTxWitnessBuf(w, pver, version, wit, nil)
+}
+
+func writeTxWitnessBuf(w io.Writer, pver uint32, version int32, wit [][]byte, b []byte) error {
+	buf := b
+	if buf == nil {
+		buf = binarySerializer.Borrow()[:8]
+	}
+
+	err := WriteVarIntBuf(w, pver, uint64(len(wit)), buf)
 	if err != nil {
+		if b == nil {
+			binarySerializer.Return(buf)
+		}
 		return err
 	}
 	for _, item := range wit {
-		err = WriteVarBytes(w, pver, item)
+		err = WriteVarBytesBuf(w, pver, item, buf)
 		if err != nil {
+			if b == nil {
+				binarySerializer.Return(buf)
+			}
 			return err
 		}
+	}
+	if b == nil {
+		binarySerializer.Return(buf)
 	}
 	return nil
 }
