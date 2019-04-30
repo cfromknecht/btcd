@@ -1115,14 +1115,28 @@ func writeTxInBuf(w io.Writer, pver uint32, version int32, ti *TxIn, b []byte) e
 
 // readTxOut reads the next sequence of bytes from r as a transaction output
 // (TxOut).
+//
+// DEPRECATED: Use readTxOutBuf instead.
 func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) error {
-	err := readElement(r, &to.Value)
+	return readTxOutBuf(r, pver, version, to, nil)
+}
+
+// readTxOutBuf reads the next sequence of bytes from r as a transaction output
+// (TxOut). If b is non-nil, the provided buffer will be used for serializing
+// small values. Otherwise a buffer will be drawn from the binarySerializer's
+// pool and return when the method finishes.
+func readTxOutBuf(r io.Reader, pver uint32, version int32, to *TxOut, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	_, err := io.ReadFull(r, buf)
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
+	to.Value = int64(littleEndian.Uint64(buf))
 
-	to.PkScript, err = readScript(r, pver, MaxMessagePayload,
+	to.PkScript, err = readScriptBuf(r, pver, buf, MaxMessagePayload,
 		"transaction output public key script")
+	binarySerializer.maybeReturn(b, buf)
 	return err
 }
 
