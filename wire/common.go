@@ -167,6 +167,30 @@ func (l binaryFreeList) PutUint64(w io.Writer, byteOrder binary.ByteOrder, val u
 	return err
 }
 
+// maybeBorrow conditionally borrows a buffer from the binaryFreeList if the
+// provided buffer is nil. If b is non-nil, the provided buffer is returned
+// directly.
+func (l binaryFreeList) maybeBorrow(b []byte) []byte {
+	if b != nil {
+		return b
+	}
+
+	return l.Borrow()
+}
+
+// maybeReturn conditionally returns buf to the binaryFreeList depending on
+// the nil-ness of b. If b is non-nil, it is assumed that maybeBorrow did not
+// borrow from the free list and results in a NOP. Otherwise, it is assumed that
+// buf is the buffer returned from maybeBorrow, and returns buf to the free
+// list.
+func (l binaryFreeList) maybeReturn(b, buf []byte) {
+	if b != nil {
+		return
+	}
+
+	l.Return(buf)
+}
+
 // binarySerializer provides a free list of buffers to use for serializing and
 // deserializing primitive integer values to and from io.Readers and io.Writers.
 var binarySerializer binaryFreeList = make(chan []byte, binaryFreeListMaxItems)
@@ -474,9 +498,21 @@ func writeElements(w io.Writer, elements ...interface{}) error {
 
 // ReadVarInt reads a variable length integer from r and returns it as a uint64.
 func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
-	buf := binarySerializer.Borrow()
+	return ReadVarIntBuf(r, pver, nil)
+}
+
+// ReadVarIntBuf reads a variable length integer from r and returns it as a
+// uint64.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values. Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func ReadVarIntBuf(r io.Reader, pver uint32, b []byte) (uint64, error) {
+	buf := binarySerializer.maybeBorrow(b)
 	if _, err := io.ReadFull(r, buf[:1]); err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return 0, err
 	}
 	discriminant := buf[0]
@@ -485,11 +521,11 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 	switch discriminant {
 	case 0xff:
 		if _, err := io.ReadFull(r, buf); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return 0, err
 		}
 		rv = littleEndian.Uint64(buf)
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
@@ -501,11 +537,11 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 
 	case 0xfe:
 		if _, err := io.ReadFull(r, buf[:4]); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return 0, err
 		}
 		rv = uint64(littleEndian.Uint32(buf[:4]))
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
@@ -517,11 +553,11 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 
 	case 0xfd:
 		if _, err := io.ReadFull(r, buf[:2]); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return 0, err
 		}
 		rv = uint64(littleEndian.Uint16(buf[:2]))
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
@@ -533,7 +569,7 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 
 	default:
 		rv = uint64(discriminant)
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 	}
 
 	return rv, nil
@@ -542,38 +578,52 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 // WriteVarInt serializes val to w using a variable number of bytes depending
 // on its value.
 func WriteVarInt(w io.Writer, pver uint32, val uint64) error {
-	buf := binarySerializer.Borrow()
+	return WriteVarIntBuf(w, pver, val, nil)
+}
+
+// WriteVarIntBuf serializes val to w using a variable number of bytes depending
+// on its value. If b is non-nil, the provided buffer will be used for
+// serializing small values. Otherwise a buffer will be drawn from the
+// binarySerializer's pool and return when the method finishes.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values. Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func WriteVarIntBuf(w io.Writer, pver uint32, val uint64, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
 	switch {
 	case val < 0xfd:
 		buf[0] = uint8(val)
 		_, err := w.Write(buf[:1])
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 
 	case val <= math.MaxUint16:
 		buf[0] = 0xfd
 		littleEndian.PutUint16(buf[1:3], uint16(val))
 		_, err := w.Write(buf[:3])
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 
 	case val <= math.MaxUint32:
 		buf[0] = 0xfe
 		littleEndian.PutUint32(buf[1:5], uint32(val))
 		_, err := w.Write(buf[:5])
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 
 	default:
 		buf[0] = 0xff
 		if _, err := w.Write(buf[:1]); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 
 		littleEndian.PutUint64(buf, val)
 		_, err := w.Write(buf)
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 }
