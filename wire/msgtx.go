@@ -499,7 +499,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		// and needs to be returned to the pool on error.
 		ti := &txIns[i]
 		msg.TxIn[i] = ti
-		err = readTxIn(r, pver, msg.Version, ti)
+		err = readTxInBuf(r, pver, msg.Version, ti, buf)
 		if err != nil {
 			binarySerializer.Return(buf)
 			returnScriptBuffers()
