@@ -474,54 +474,60 @@ func writeElements(w io.Writer, elements ...interface{}) error {
 
 // ReadVarInt reads a variable length integer from r and returns it as a uint64.
 func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
-	discriminant, err := binarySerializer.Uint8(r)
+	buf := binarySerializer.Borrow()[:8]
+	_, err := io.ReadFull(r, buf[:1])
 	if err != nil {
+		binarySerializer.Return(buf)
 		return 0, err
 	}
+	discriminant := buf[0]
 
 	var rv uint64
 	switch discriminant {
 	case 0xff:
-		sv, err := binarySerializer.Uint64(r, littleEndian)
-		if err != nil {
-			return 0, err
+		if _, err := io.ReadFull(r, buf[:8]); err != nil {
+			binarySerializer.Return(buf)
+			return 0, nil
 		}
-		rv = sv
+		rv = littleEndian.Uint64(buf[:8])
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
 		min := uint64(0x100000000)
 		if rv < min {
+			binarySerializer.Return(buf)
 			return 0, messageError("ReadVarInt", fmt.Sprintf(
 				errNonCanonicalVarInt, rv, discriminant, min))
 		}
 
 	case 0xfe:
-		sv, err := binarySerializer.Uint32(r, littleEndian)
-		if err != nil {
-			return 0, err
+		if _, err := io.ReadFull(r, buf[:4]); err != nil {
+			binarySerializer.Return(buf)
+			return 0, nil
 		}
-		rv = uint64(sv)
+		rv = uint64(littleEndian.Uint32(buf[:4]))
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
 		min := uint64(0x10000)
 		if rv < min {
+			binarySerializer.Return(buf)
 			return 0, messageError("ReadVarInt", fmt.Sprintf(
 				errNonCanonicalVarInt, rv, discriminant, min))
 		}
 
 	case 0xfd:
-		sv, err := binarySerializer.Uint16(r, littleEndian)
-		if err != nil {
-			return 0, err
+		if _, err := io.ReadFull(r, buf[:2]); err != nil {
+			binarySerializer.Return(buf)
+			return 0, nil
 		}
-		rv = uint64(sv)
+		rv = uint64(littleEndian.Uint16(buf[:2]))
 
 		// The encoding is not canonical if the value could have been
 		// encoded using fewer bytes.
 		min := uint64(0xfd)
 		if rv < min {
+			binarySerializer.Return(buf)
 			return 0, messageError("ReadVarInt", fmt.Sprintf(
 				errNonCanonicalVarInt, rv, discriminant, min))
 		}
@@ -530,37 +536,67 @@ func ReadVarInt(r io.Reader, pver uint32) (uint64, error) {
 		rv = uint64(discriminant)
 	}
 
+	binarySerializer.Return(buf)
+
 	return rv, nil
 }
 
 // WriteVarInt serializes val to w using a variable number of bytes depending
 // on its value.
 func WriteVarInt(w io.Writer, pver uint32, val uint64) error {
-	if val < 0xfd {
-		return binarySerializer.PutUint8(w, uint8(val))
-	}
-
-	if val <= math.MaxUint16 {
-		err := binarySerializer.PutUint8(w, 0xfd)
-		if err != nil {
+	buf := binarySerializer.Borrow()[:8]
+	switch {
+	case val < 0xfd:
+		buf[0] = uint8(val)
+		if _, err := w.Write(buf[:1]); err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
-		return binarySerializer.PutUint16(w, littleEndian, uint16(val))
-	}
 
-	if val <= math.MaxUint32 {
-		err := binarySerializer.PutUint8(w, 0xfe)
-		if err != nil {
+	case val <= math.MaxUint16:
+		buf[0] = 0xfd
+		buf[1] = uint8(val >> 8)
+		buf[2] = uint8(val)
+		if _, err := w.Write(buf[:3]); err != nil {
+			binarySerializer.Return(buf)
 			return err
 		}
-		return binarySerializer.PutUint32(w, littleEndian, uint32(val))
+
+	case val <= math.MaxUint32:
+		buf[0] = 0xfd
+		buf[1] = uint8(val >> 24)
+		buf[2] = uint8(val >> 16)
+		buf[3] = uint8(val >> 8)
+		buf[4] = uint8(val)
+		if _, err := w.Write(buf[:5]); err != nil {
+			binarySerializer.Return(buf)
+			return err
+		}
+
+	default:
+		buf[0] = 0xfd
+		if _, err := w.Write(buf[:1]); err != nil {
+			binarySerializer.Return(buf)
+			return err
+		}
+
+		buf[0] = uint8(val >> 56)
+		buf[1] = uint8(val >> 48)
+		buf[2] = uint8(val >> 40)
+		buf[3] = uint8(val >> 32)
+		buf[4] = uint8(val >> 24)
+		buf[5] = uint8(val >> 16)
+		buf[6] = uint8(val >> 8)
+		buf[7] = uint8(val)
+		if _, err := w.Write(buf[:]); err != nil {
+			binarySerializer.Return(buf)
+			return err
+		}
 	}
 
-	err := binarySerializer.PutUint8(w, 0xff)
-	if err != nil {
-		return err
-	}
-	return binarySerializer.PutUint64(w, littleEndian, val)
+	binarySerializer.Return(buf)
+
+	return nil
 }
 
 // VarIntSerializeSize returns the number of bytes it would take to serialize
