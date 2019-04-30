@@ -574,7 +574,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 			// item itself.
 			txin.Witness = make([][]byte, witCount)
 			for j := uint64(0); j < witCount; j++ {
-				txin.Witness[j], err = readScript(r, pver,
+				txin.Witness[j], err = readScriptBuf(r, pver, buf,
 					maxWitnessItemSize, "script witness item")
 				if err != nil {
 					binarySerializer.Return(buf)
