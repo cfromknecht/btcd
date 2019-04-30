@@ -295,11 +295,13 @@ func BenchmarkReadOutPoint(b *testing.B) {
 		0xff, 0xff, 0xff, 0xff, // Previous output index
 	}
 	r := bytes.NewReader(buf)
+	bb := binarySerializer.Borrow()[:8]
 	var op OutPoint
 	for i := 0; i < b.N; i++ {
 		r.Seek(0, 0)
-		readOutPoint(r, 0, 0, &op)
+		readOutPointBuf(r, 0, 0, &op, bb)
 	}
+	binarySerializer.Return(bb)
 }
 
 // BenchmarkWriteOutPoint performs a benchmark on how long it takes to write a
@@ -311,9 +313,11 @@ func BenchmarkWriteOutPoint(b *testing.B) {
 		Hash:  chainhash.Hash{},
 		Index: 0,
 	}
+	buf := binarySerializer.Borrow()[:8]
 	for i := 0; i < b.N; i++ {
-		writeOutPoint(ioutil.Discard, 0, 0, op)
+		writeOutPointBuf(ioutil.Discard, 0, 0, op, buf)
 	}
+	binarySerializer.Return(buf)
 }
 
 // BenchmarkReadTxOut performs a benchmark on how long it takes to read a
@@ -337,12 +341,14 @@ func BenchmarkReadTxOut(b *testing.B) {
 		0xac, // OP_CHECKSIG
 	}
 	r := bytes.NewReader(buf)
+	bb := binarySerializer.Borrow()[:8]
 	var txOut TxOut
 	for i := 0; i < b.N; i++ {
 		r.Seek(0, 0)
-		readTxOut(r, 0, 0, &txOut)
+		readTxOutBuf(r, 0, 0, &txOut, bb)
 		scriptPool.Return(txOut.PkScript)
 	}
+	binarySerializer.Return(bb)
 }
 
 // BenchmarkWriteTxOut performs a benchmark on how long it takes to write
@@ -350,10 +356,12 @@ func BenchmarkReadTxOut(b *testing.B) {
 func BenchmarkWriteTxOut(b *testing.B) {
 	b.ReportAllocs()
 
+	buf := binarySerializer.Borrow()[:8]
 	txOut := blockOne.Transactions[0].TxOut[0]
 	for i := 0; i < b.N; i++ {
-		WriteTxOut(ioutil.Discard, 0, 0, txOut)
+		WriteTxOutBuf(ioutil.Discard, 0, 0, txOut, buf)
 	}
+	binarySerializer.Return(buf)
 }
 
 // BenchmarkReadTxIn performs a benchmark on how long it takes to read a
@@ -372,12 +380,14 @@ func BenchmarkReadTxIn(b *testing.B) {
 		0xff, 0xff, 0xff, 0xff, // Sequence
 	}
 	r := bytes.NewReader(buf)
+	bb := binarySerializer.Borrow()[:8]
 	var txIn TxIn
 	for i := 0; i < b.N; i++ {
 		r.Seek(0, 0)
-		readTxIn(r, 0, 0, &txIn)
+		readTxInBuf(r, 0, 0, &txIn, bb)
 		scriptPool.Return(txIn.SignatureScript)
 	}
+	binarySerializer.Return(bb)
 }
 
 // BenchmarkWriteTxIn performs a benchmark on how long it takes to write
@@ -385,10 +395,12 @@ func BenchmarkReadTxIn(b *testing.B) {
 func BenchmarkWriteTxIn(b *testing.B) {
 	b.ReportAllocs()
 
+	buf := binarySerializer.Borrow()[:8]
 	txIn := blockOne.Transactions[0].TxIn[0]
 	for i := 0; i < b.N; i++ {
-		writeTxIn(ioutil.Discard, 0, 0, txIn)
+		writeTxInBuf(ioutil.Discard, 0, 0, txIn, buf)
 	}
+	binarySerializer.Return(buf)
 }
 
 // BenchmarkDeserializeTx performs a benchmark on how long it takes to
