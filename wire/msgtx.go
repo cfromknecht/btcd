@@ -731,7 +731,7 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 	}
 
 	for _, ti := range msg.TxIn {
-		err = writeTxIn(w, pver, msg.Version, ti)
+		err = writeTxInBuf(w, pver, msg.Version, ti, buf)
 		if err != nil {
 			binarySerializer.Return(buf)
 			return err
