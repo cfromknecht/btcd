@@ -1132,12 +1132,29 @@ func readTxOut(r io.Reader, pver uint32, version int32, to *TxOut) error {
 // NOTE: This function is exported in order to allow txscript to compute the
 // new sighashes for witness transactions (BIP0143).
 func WriteTxOut(w io.Writer, pver uint32, version int32, to *TxOut) error {
-	err := binarySerializer.PutUint64(w, littleEndian, uint64(to.Value))
+	return WriteTxOutBuf(w, pver, version, to, nil)
+}
+
+// WriteTxOutBuf encodes to into the bitcoin protocol encoding for a transaction
+// output (TxOut) to w. If b is non-nil, the provided buffer will be used for
+// serializing small values. Otherwise a buffer will be drawn from the
+// binarySerializer's pool and return when the method finishes.
+//
+// NOTE: This function is exported in order to allow txscript to compute the
+// new sighashes for witness transactions (BIP0143).
+func WriteTxOutBuf(w io.Writer, pver uint32, version int32, to *TxOut, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	littleEndian.PutUint64(buf, uint64(to.Value))
+	_, err := w.Write(buf)
 	if err != nil {
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
-	return WriteVarBytes(w, pver, to.PkScript)
+	err = WriteVarBytesBuf(w, pver, to.PkScript, buf)
+	binarySerializer.maybeReturn(b, buf)
+
+	return err
 }
 
 // writeTxWitness encodes the bitcoin protocol encoding for a transaction
