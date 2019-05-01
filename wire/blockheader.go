@@ -172,8 +172,58 @@ func readBlockHeaderBuf(r io.Reader, pver uint32, bh *BlockHeader, b []byte) err
 // writeBlockHeader writes a bitcoin block header to w.  See Serialize for
 // encoding block headers to be stored to disk, such as in a database, as
 // opposed to encoding for the wire.
+//
+// DEPRECATED: Use writeBlockHeaderBuf instead.
 func writeBlockHeader(w io.Writer, pver uint32, bh *BlockHeader) error {
-	sec := uint32(bh.Timestamp.Unix())
-	return writeElements(w, bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		sec, bh.Bits, bh.Nonce)
+	return writeBlockHeaderBuf(w, pver, bh, nil)
+}
+
+// writeBlockHeaderBuf writes a bitcoin block header to w.  See Serialize for
+// encoding block headers to be stored to disk, such as in a database, as
+// opposed to encoding for the wire.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func writeBlockHeaderBuf(w io.Writer, pver uint32, bh *BlockHeader, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	littleEndian.PutUint32(buf[:4], uint32(bh.Version))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	if _, err := w.Write(bh.PrevBlock[:]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	if _, err := w.Write(bh.MerkleRoot[:]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], uint32(bh.Timestamp.Unix()))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], bh.Bits)
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	littleEndian.PutUint32(buf[:4], bh.Nonce)
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	binarySerializer.maybeReturn(b, buf)
+
+	return nil
 }
