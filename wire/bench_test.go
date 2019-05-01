@@ -729,17 +729,6 @@ func BenchmarkReadBlockHeader(b *testing.B) {
 func BenchmarkWriteBlockHeader(b *testing.B) {
 	b.ReportAllocs()
 
-	header := blockOne.Header
-	for i := 0; i < b.N; i++ {
-		writeBlockHeader(ioutil.Discard, 0, &header)
-	}
-}
-
-// BenchmarkWriteBlockHeaderBuf performs a benchmark on how long it takes to
-// serialize a block header.
-func BenchmarkWriteBlockHeaderBuf(b *testing.B) {
-	b.ReportAllocs()
-
 	buf := binarySerializer.Borrow()
 	header := blockOne.Header
 	for i := 0; i < b.N; i++ {

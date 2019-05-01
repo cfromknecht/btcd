@@ -51,7 +51,7 @@ func (h *BlockHeader) BlockHash() chainhash.Hash {
 	// encode could fail except being out of memory which would cause a
 	// run-time panic.
 	buf := bytes.NewBuffer(make([]byte, 0, MaxBlockHeaderPayload))
-	_ = writeBlockHeader(buf, 0, h)
+	_ = writeBlockHeaderBuf(buf, 0, h, nil)
 
 	return chainhash.DoubleHashH(buf.Bytes())
 }
@@ -69,7 +69,7 @@ func (h *BlockHeader) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) e
 // See Serialize for encoding block headers to be stored to disk, such as in a
 // database, as opposed to encoding block headers for the wire.
 func (h *BlockHeader) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	return writeBlockHeader(w, pver, h)
+	return writeBlockHeaderBuf(w, pver, h, nil)
 }
 
 // Deserialize decodes a block header from r into the receiver using a format
@@ -89,7 +89,7 @@ func (h *BlockHeader) Serialize(w io.Writer) error {
 	// At the current time, there is no difference between the wire encoding
 	// at protocol version 0 and the stable long-term storage format.  As
 	// a result, make use of writeBlockHeader.
-	return writeBlockHeader(w, 0, h)
+	return writeBlockHeaderBuf(w, 0, h, nil)
 }
 
 // NewBlockHeader returns a new BlockHeader using the provided version, previous
@@ -158,15 +158,6 @@ func readBlockHeaderBuf(r io.Reader, pver uint32, bh *BlockHeader, b []byte) err
 	binarySerializer.maybeReturn(b, buf)
 
 	return nil
-}
-
-// writeBlockHeader writes a bitcoin block header to w.  See Serialize for
-// encoding block headers to be stored to disk, such as in a database, as
-// opposed to encoding for the wire.
-//
-// DEPRECATED: Use writeBlockHeaderBuf instead.
-func writeBlockHeader(w io.Writer, pver uint32, bh *BlockHeader) error {
-	return writeBlockHeaderBuf(w, pver, bh, nil)
 }
 
 // writeBlockHeaderBuf writes a bitcoin block header to w.  See Serialize for
