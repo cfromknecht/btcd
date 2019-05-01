@@ -409,17 +409,31 @@ func (msg *MsgTx) Copy() *MsgTx {
 // See Deserialize for decoding transactions stored to disk, such as in a
 // database, as opposed to decoding transactions from the wire.
 func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	buf := binarySerializer.Borrow()
+	return msg.btcDecodeBuf(r, pver, enc, nil)
+}
+
+// BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
+// This is part of the Message interface implementation.
+// See Deserialize for decoding transactions stored to disk, such as in a
+// database, as opposed to decoding transactions from the wire.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
 
 	if _, err := io.ReadFull(r, buf[:4]); err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 	msg.Version = int32(littleEndian.Uint32(buf[:4]))
 
 	count, err := ReadVarIntBuf(r, pver, buf)
 	if err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
@@ -429,14 +443,14 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	if count == 0 && enc == WitnessEncoding {
 		// Next, we need to read the flag, which is a single byte.
 		if _, err = io.ReadFull(r, flag[:]); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 
 		// At the moment, the flag MUST be 0x01. In the future other
 		// flag types may be supported.
 		if flag[0] != 0x01 {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			str := fmt.Sprintf("witness tx but flag byte is %x", flag)
 			return messageError("MsgTx.BtcDecode", str)
 		}
@@ -445,7 +459,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		// now read in the actual txin count.
 		count, err = ReadVarIntBuf(r, pver, buf)
 		if err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 	}
@@ -454,7 +468,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
 	if count > uint64(maxTxInPerMessage) {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		str := fmt.Sprintf("too many input transactions to fit into "+
 			"max message size [count %d, max %d]", count,
 			maxTxInPerMessage)
@@ -501,7 +515,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		msg.TxIn[i] = ti
 		err = readTxInBuf(r, pver, msg.Version, ti, buf)
 		if err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			returnScriptBuffers()
 			return err
 		}
@@ -510,7 +524,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 
 	count, err = ReadVarIntBuf(r, pver, buf)
 	if err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		returnScriptBuffers()
 		return err
 	}
@@ -519,7 +533,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	// message.  It would be possible to cause memory exhaustion and panics
 	// without a sane upper bound on this count.
 	if count > uint64(maxTxOutPerMessage) {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		returnScriptBuffers()
 		str := fmt.Sprintf("too many output transactions to fit into "+
 			"max message size [count %d, max %d]", count,
@@ -537,7 +551,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		msg.TxOut[i] = to
 		err = readTxOutBuf(r, pver, msg.Version, to, buf)
 		if err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			returnScriptBuffers()
 			return err
 		}
@@ -553,7 +567,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 			// varint which encodes the number of stack items.
 			witCount, err := ReadVarIntBuf(r, pver, buf)
 			if err != nil {
-				binarySerializer.Return(buf)
+				binarySerializer.maybeReturn(b, buf)
 				returnScriptBuffers()
 				return err
 			}
@@ -561,7 +575,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 			// Prevent a possible memory exhaustion attack by
 			// limiting the witCount value to a sane upper bound.
 			if witCount > maxWitnessItemsPerInput {
-				binarySerializer.Return(buf)
+				binarySerializer.maybeReturn(b, buf)
 				returnScriptBuffers()
 				str := fmt.Sprintf("too many witness items to fit "+
 					"into max message size [count %d, max %d]",
@@ -577,7 +591,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 				txin.Witness[j], err = readScriptBuf(r, pver, buf,
 					maxWitnessItemSize, "script witness item")
 				if err != nil {
-					binarySerializer.Return(buf)
+					binarySerializer.maybeReturn(b, buf)
 					returnScriptBuffers()
 					return err
 				}
@@ -587,7 +601,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 	}
 
 	if _, err := io.ReadFull(r, buf[:4]); err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		returnScriptBuffers()
 		return err
 	}
@@ -661,7 +675,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 		scriptPool.Return(pkScript)
 	}
 
-	binarySerializer.Return(buf)
+	binarySerializer.maybeReturn(b, buf)
 
 	return nil
 }
@@ -696,11 +710,26 @@ func (msg *MsgTx) DeserializeNoWitness(r io.Reader) error {
 // See Serialize for encoding transactions to be stored to disk, such as in a
 // database, as opposed to encoding transactions for the wire.
 func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	buf := binarySerializer.Borrow()
+	return msg.btcEncodeBuf(w, pver, enc, nil)
+}
+
+// btcEncodeBuf encodes the receiver to w using the bitcoin protocol encoding.
+// This is part of the Message interface implementation.
+// See Serialize for encoding transactions to be stored to disk, such as in a
+// database, as opposed to encoding transactions for the wire.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func (msg *MsgTx) btcEncodeBuf(w io.Writer, pver uint32, enc MessageEncoding, b []byte) error {
+
+	buf := binarySerializer.maybeBorrow(b)
 
 	littleEndian.PutUint32(buf[:4], uint32(msg.Version))
 	if _, err := w.Write(buf[:4]); err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
@@ -718,7 +747,7 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 		// which at the moment is always 0x01, but may be extended in
 		// the future to accommodate auxiliary non-committed fields.
 		if _, err := w.Write(witessMarkerBytes); err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 	}
@@ -726,14 +755,14 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 	count := uint64(len(msg.TxIn))
 	err := WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
 	for _, ti := range msg.TxIn {
 		err = writeTxInBuf(w, pver, msg.Version, ti, buf)
 		if err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 	}
@@ -741,14 +770,14 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 	count = uint64(len(msg.TxOut))
 	err = WriteVarIntBuf(w, pver, count, buf)
 	if err != nil {
-		binarySerializer.Return(buf)
+		binarySerializer.maybeReturn(b, buf)
 		return err
 	}
 
 	for _, to := range msg.TxOut {
 		err = WriteTxOutBuf(w, pver, msg.Version, to, buf)
 		if err != nil {
-			binarySerializer.Return(buf)
+			binarySerializer.maybeReturn(b, buf)
 			return err
 		}
 	}
@@ -760,7 +789,7 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 		for _, ti := range msg.TxIn {
 			err = writeTxWitnessBuf(w, pver, msg.Version, ti.Witness, buf)
 			if err != nil {
-				binarySerializer.Return(buf)
+				binarySerializer.maybeReturn(b, buf)
 				return err
 			}
 		}
@@ -768,7 +797,7 @@ func (msg *MsgTx) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error
 
 	littleEndian.PutUint32(buf[:4], msg.LockTime)
 	_, err = w.Write(buf[:4])
-	binarySerializer.Return(buf)
+	binarySerializer.maybeReturn(b, buf)
 	return err
 }
 
