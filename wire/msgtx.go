@@ -955,13 +955,6 @@ func NewMsgTx(version int32) *MsgTx {
 	}
 }
 
-// readOutPoint reads the next sequence of bytes from r as an OutPoint.
-//
-// DEPRECATED: Use readOutPointBuf instead.
-func readOutPoint(r io.Reader, pver uint32, version int32, op *OutPoint) error {
-	return readOutPointBuf(r, pver, version, op, nil)
-}
-
 // readOutPointBuf reads the next sequence of bytes from r as an OutPoint.
 //
 // If b is non-nil, the provided buffer will be used for serializing small
@@ -985,14 +978,6 @@ func readOutPointBuf(r io.Reader, pver uint32, version int32, op *OutPoint, b []
 	binarySerializer.maybeReturn(b, buf)
 
 	return nil
-}
-
-// writeOutPoint encodes op to the bitcoin protocol encoding for an OutPoint
-// to w.
-//
-// DEPRECATED: Use writeOutPointBuf instead.
-func writeOutPoint(w io.Writer, pver uint32, version int32, op *OutPoint) error {
-	return writeOutPointBuf(w, pver, version, op, nil)
 }
 
 // writeOutPoint encodes op to the bitcoin protocol encoding for an OutPoint
