@@ -76,11 +76,56 @@ func NewInvVect(typ InvType, hash *chainhash.Hash) *InvVect {
 
 // readInvVect reads an encoded InvVect from r depending on the protocol
 // version.
+//
+// DEPRECATED: Use readInvVectBuf instead.
 func readInvVect(r io.Reader, pver uint32, iv *InvVect) error {
-	return readElements(r, &iv.Type, &iv.Hash)
+	return readInvVectBuf(r, pver, iv, nil)
+}
+
+// readInvVectBuf reads an encoded InvVect from r depending on the protocol
+// version.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func readInvVectBuf(r io.Reader, pver uint32, iv *InvVect, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	iv.Type = InvType(littleEndian.Uint32(buf[:4]))
+	binarySerializer.maybeReturn(b, buf)
+
+	_, err := io.ReadFull(r, iv.Hash[:])
+	return err
 }
 
 // writeInvVect serializes an InvVect to w depending on the protocol version.
+//
+// DEPRECATED: Use writeInvVectBuf instead.
 func writeInvVect(w io.Writer, pver uint32, iv *InvVect) error {
-	return writeElements(w, iv.Type, &iv.Hash)
+	return writeInvVectBuf(w, pver, iv, nil)
+}
+
+// writeInvVectBuf serializes an InvVect to w depending on the protocol version.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func writeInvVectBuf(w io.Writer, pver uint32, iv *InvVect, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	littleEndian.PutUint32(buf[:4], uint32(iv.Type))
+	if _, err := w.Write(buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	binarySerializer.maybeReturn(b, buf)
+
+	_, err := w.Write(iv.Hash[:])
+	return err
 }
