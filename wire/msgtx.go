@@ -1069,14 +1069,6 @@ func readScriptBuf(r io.Reader, pver uint32, b []byte, maxAllowed uint32, fieldN
 	return bytes, nil
 }
 
-// readTxIn reads the next sequence of bytes from r as a transaction input
-// (TxIn).
-//
-// DEPRECATED: Use readTxInBuf instead.
-func readTxIn(r io.Reader, pver uint32, version int32, ti *TxIn) error {
-	return readTxInBuf(r, pver, version, ti, nil)
-}
-
 // readTxInBuf reads the next sequence of bytes from r as a transaction input
 // (TxIn).
 //
