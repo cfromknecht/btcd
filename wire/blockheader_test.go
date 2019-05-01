@@ -161,7 +161,7 @@ func TestBlockHeaderWire(t *testing.T) {
 		// Decode the block header from wire format.
 		var bh BlockHeader
 		rbuf := bytes.NewReader(test.buf)
-		err = readBlockHeader(rbuf, test.pver, &bh)
+		err = readBlockHeaderBuf(rbuf, test.pver, &bh, nil)
 		if err != nil {
 			t.Errorf("readBlockHeader #%d error %v", i, err)
 			continue
