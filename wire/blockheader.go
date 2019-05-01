@@ -113,9 +113,60 @@ func NewBlockHeader(version int32, prevHash, merkleRootHash *chainhash.Hash,
 // readBlockHeader reads a bitcoin block header from r.  See Deserialize for
 // decoding block headers stored to disk, such as in a database, as opposed to
 // decoding from the wire.
+//
+// DEPRECATED: Use readBlockHeaderBuf instead.
 func readBlockHeader(r io.Reader, pver uint32, bh *BlockHeader) error {
-	return readElements(r, &bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
-		(*uint32Time)(&bh.Timestamp), &bh.Bits, &bh.Nonce)
+	return readBlockHeaderBuf(r, pver, bh, nil)
+}
+
+// readBlockHeaderBuf reads a bitcoin block header from r.  See Deserialize for
+// decoding block headers stored to disk, such as in a database, as opposed to
+// decoding from the wire.
+//
+// If b is non-nil, the provided buffer will be used for serializing small
+// values.  Otherwise a buffer will be drawn from the binarySerializer's pool
+// and return when the method finishes.
+//
+// NOTE: b MUST either be nil or at least an 8-byte slice.
+func readBlockHeaderBuf(r io.Reader, pver uint32, bh *BlockHeader, b []byte) error {
+	buf := binarySerializer.maybeBorrow(b)
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	bh.Version = int32(littleEndian.Uint32(buf[:4]))
+
+	if _, err := io.ReadFull(r, bh.PrevBlock[:]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	if _, err := io.ReadFull(r, bh.MerkleRoot[:]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	bh.Timestamp = time.Unix(int64(littleEndian.Uint32(buf[:4])), 0)
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	bh.Bits = littleEndian.Uint32(buf[:4])
+
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		binarySerializer.maybeReturn(b, buf)
+		return err
+	}
+	bh.Nonce = littleEndian.Uint32(buf[:4])
+
+	binarySerializer.maybeReturn(b, buf)
+
+	return nil
 }
 
 // writeBlockHeader writes a bitcoin block header to w.  See Serialize for
