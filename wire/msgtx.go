@@ -164,6 +164,20 @@ func (c scriptFreeList) Return(buf *scriptSlab) {
 	}
 }
 
+func (c scriptFreeList) maybeBorrow(b *scriptSlab) *scriptSlab {
+	if b != nil {
+		return b
+	}
+	return c.Borrow()
+}
+
+func (c scriptFreeList) maybeReturn(b, buf *scriptSlab) {
+	if b != nil {
+		return
+	}
+	c.Return(buf)
+}
+
 // Create the concurrent safe free list to use for script deserialization.  As
 // previously described, this free list is maintained to significantly reduce
 // the number of allocations.
@@ -403,7 +417,7 @@ func (msg *MsgTx) Copy() *MsgTx {
 // See Deserialize for decoding transactions stored to disk, such as in a
 // database, as opposed to decoding transactions from the wire.
 func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	return msg.btcDecodeBuf(r, pver, enc, nil)
+	return msg.btcDecodeBuf(r, pver, enc, nil, nil)
 }
 
 // BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
@@ -416,7 +430,7 @@ func (msg *MsgTx) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error
 // and return when the method finishes.
 //
 // NOTE: b MUST either be nil or at least an 8-byte slice.
-func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b []byte) error {
+func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b []byte, s *scriptSlab) error {
 	buf := binarySerializer.maybeBorrow(b)
 
 	if _, err := io.ReadFull(r, buf[:4]); err != nil {
@@ -469,7 +483,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 		return messageError("MsgTx.BtcDecode", str)
 	}
 
-	scriptBuf := scriptPool.Borrow()
+	scriptBuf := scriptPool.maybeBorrow(s)
 	sbuf := scriptBuf[:]
 
 	// Deserialize the inputs.
@@ -482,7 +496,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 		err = readTxInBuf(r, pver, msg.Version, ti, buf, sbuf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
-			scriptPool.Return(scriptBuf)
+			scriptPool.maybeReturn(s, scriptBuf)
 			return err
 		}
 		totalScriptSize += uint64(len(ti.SignatureScript))
@@ -492,7 +506,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 	count, err = ReadVarIntBuf(r, pver, buf)
 	if err != nil {
 		binarySerializer.maybeReturn(b, buf)
-		scriptPool.Return(scriptBuf)
+		scriptPool.maybeReturn(s, scriptBuf)
 		return err
 	}
 
@@ -501,7 +515,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 	// without a sane upper bound on this count.
 	if count > uint64(maxTxOutPerMessage) {
 		binarySerializer.maybeReturn(b, buf)
-		scriptPool.Return(scriptBuf)
+		scriptPool.maybeReturn(s, scriptBuf)
 		str := fmt.Sprintf("too many output transactions to fit into "+
 			"max message size [count %d, max %d]", count,
 			maxTxOutPerMessage)
@@ -517,7 +531,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 		err = readTxOutBuf(r, pver, msg.Version, to, buf, sbuf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
-			scriptPool.Return(scriptBuf)
+			scriptPool.maybeReturn(s, scriptBuf)
 			return err
 		}
 		totalScriptSize += uint64(len(to.PkScript))
@@ -535,7 +549,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 			witCount, err := ReadVarIntBuf(r, pver, buf)
 			if err != nil {
 				binarySerializer.maybeReturn(b, buf)
-				scriptPool.Return(scriptBuf)
+				scriptPool.maybeReturn(s, scriptBuf)
 				return err
 			}
 
@@ -543,7 +557,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 			// limiting the witCount value to a sane upper bound.
 			if witCount > maxWitnessItemsPerInput {
 				binarySerializer.maybeReturn(b, buf)
-				scriptPool.Return(scriptBuf)
+				scriptPool.maybeReturn(s, scriptBuf)
 				str := fmt.Sprintf("too many witness items to fit "+
 					"into max message size [count %d, max %d]",
 					witCount, maxWitnessItemsPerInput)
@@ -559,7 +573,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 					maxWitnessItemSize, "script witness item")
 				if err != nil {
 					binarySerializer.maybeReturn(b, buf)
-					scriptPool.Return(scriptBuf)
+					scriptPool.maybeReturn(s, scriptBuf)
 					return err
 				}
 				totalScriptSize += uint64(len(txin.Witness[j]))
@@ -570,7 +584,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 
 	if _, err := io.ReadFull(r, buf[:4]); err != nil {
 		binarySerializer.maybeReturn(b, buf)
-		scriptPool.Return(scriptBuf)
+		scriptPool.maybeReturn(s, scriptBuf)
 		return err
 	}
 	msg.LockTime = littleEndian.Uint32(buf[:4])
@@ -634,7 +648,7 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 	}
 
 	binarySerializer.maybeReturn(b, buf)
-	scriptPool.Return(scriptBuf)
+	scriptPool.maybeReturn(s, scriptBuf)
 
 	return nil
 }
