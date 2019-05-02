@@ -331,7 +331,9 @@ func checkTransactionStandard(tx *btcutil.Tx, height int32,
 	// None of the output public key scripts can be a non-standard script or
 	// be "dust" (except when the script is a null data script).
 	numNullDataOutputs := 0
-	for i, txOut := range msgTx.TxOut {
+	for i := range msgTx.TxOut {
+		txOut := &msgTx.TxOut[i]
+
 		scriptClass := txscript.GetScriptClass(txOut.PkScript)
 		err := checkPkScriptStandard(txOut.PkScript, scriptClass)
 		if err != nil {

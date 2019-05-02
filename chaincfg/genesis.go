@@ -15,7 +15,7 @@ import (
 // the main network, regression test network, and test network (version 3).
 var genesisCoinbaseTx = wire.MsgTx{
 	Version: 1,
-	TxIn: []*wire.TxIn{
+	TxIn: []wire.TxIn{
 		{
 			PreviousOutPoint: wire.OutPoint{
 				Hash:  chainhash.Hash{},
@@ -36,7 +36,7 @@ var genesisCoinbaseTx = wire.MsgTx{
 			Sequence: 0xffffffff,
 		},
 	},
-	TxOut: []*wire.TxOut{
+	TxOut: []wire.TxOut{
 		{
 			Value: 0x12a05f200,
 			PkScript: []byte{

@@ -218,7 +218,9 @@ func ValidateTransactionScripts(tx *btcutil.Tx, utxoView *UtxoViewpoint,
 	// validation.
 	txIns := tx.MsgTx().TxIn
 	txValItems := make([]*txValidateItem, 0, len(txIns))
-	for txInIdx, txIn := range txIns {
+	for txInIdx := range txIns {
+		txIn := &txIns[txInIdx]
+
 		// Skip coinbases.
 		if txIn.PreviousOutPoint.Index == math.MaxUint32 {
 			continue
@@ -278,7 +280,10 @@ func checkBlockScripts(block *btcutil.Block, utxoView *UtxoViewpoint,
 			}
 		}
 
-		for txInIdx, txIn := range tx.MsgTx().TxIn {
+		txIns := tx.MsgTx().TxIn
+		for txInIdx := range txIns {
+			txIn := &txIns[txInIdx]
+
 			// Skip coinbases.
 			if txIn.PreviousOutPoint.Index == math.MaxUint32 {
 				continue

@@ -2695,11 +2695,6 @@ func handleGetTxOut(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		}
 
 		txOut := mtx.TxOut[c.Vout]
-		if txOut == nil {
-			errStr := fmt.Sprintf("Output index: %d for txid: %s "+
-				"does not exist", c.Vout, txHash)
-			return nil, internalRPCError(errStr, "")
-		}
 
 		best := s.cfg.Chain.BestSnapshot()
 		bestBlockHash = best.Hash.String()
@@ -2847,7 +2842,7 @@ func fetchInputTxos(s *rpcServer, tx *wire.MsgTx) (map[wire.OutPoint]wire.TxOut,
 				return nil, internalRPCError(errStr, "")
 			}
 
-			originOutputs[*origin] = *txOuts[origin.Index]
+			originOutputs[*origin] = txOuts[origin.Index]
 			continue
 		}
 
@@ -2887,7 +2882,7 @@ func fetchInputTxos(s *rpcServer, tx *wire.MsgTx) (map[wire.OutPoint]wire.TxOut,
 				tx.TxHash(), txInIndex)
 			return nil, internalRPCError(errStr, "")
 		}
-		originOutputs[*origin] = *msgTx.TxOut[origin.Index]
+		originOutputs[*origin] = msgTx.TxOut[origin.Index]
 	}
 
 	return originOutputs, nil

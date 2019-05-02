@@ -187,7 +187,7 @@ func (view *UtxoViewpoint) AddTxOut(tx *btcutil.Tx, txOutIdx uint32, blockHeight
 	// being replaced by a different transaction with the same hash.  This
 	// is allowed so long as the previous transaction is fully spent.
 	prevOut := wire.OutPoint{Hash: *tx.Hash(), Index: txOutIdx}
-	txOut := tx.MsgTx().TxOut[txOutIdx]
+	txOut := &tx.MsgTx().TxOut[txOutIdx]
 	view.addTxOut(prevOut, txOut, IsCoinBase(tx), blockHeight)
 }
 
@@ -200,13 +200,15 @@ func (view *UtxoViewpoint) AddTxOuts(tx *btcutil.Tx, blockHeight int32) {
 	// provably unspendable.
 	isCoinBase := IsCoinBase(tx)
 	prevOut := wire.OutPoint{Hash: *tx.Hash()}
-	for txOutIdx, txOut := range tx.MsgTx().TxOut {
+	txOuts := tx.MsgTx().TxOut
+	for txOutIdx := range txOuts {
 		// Update existing entries.  All fields are updated because it's
 		// possible (although extremely unlikely) that the existing
 		// entry is being replaced by a different transaction with the
 		// same hash.  This is allowed so long as the previous
 		// transaction is fully spent.
 		prevOut.Index = uint32(txOutIdx)
+		txOut := &txOuts[txOutIdx]
 		view.addTxOut(prevOut, txOut, isCoinBase, blockHeight)
 	}
 }

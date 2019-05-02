@@ -831,7 +831,7 @@ mempoolLoop:
 
 		// Finally, create the OP_RETURN carrying witness commitment
 		// output as an additional output within the coinbase.
-		commitmentOutput := &wire.TxOut{
+		commitmentOutput := wire.TxOut{
 			Value:    0,
 			PkScript: witnessScript,
 		}

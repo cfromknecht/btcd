@@ -417,7 +417,8 @@ func calcHashSequence(tx *wire.MsgTx) chainhash.Hash {
 // cached, reducing the total hashing complexity from O(N^2) to O(N).
 func calcHashOutputs(tx *wire.MsgTx) chainhash.Hash {
 	var b bytes.Buffer
-	for _, out := range tx.TxOut {
+	for i, _ := range tx.TxOut {
+		out := &tx.TxOut[i]
 		wire.WriteTxOut(&b, 0, 0, out)
 	}
 
@@ -522,7 +523,7 @@ func calcWitnessSignatureHash(subScript []parsedOpcode, sigHashes *TxSigHashes,
 		sigHash.Write(sigHashes.HashOutputs[:])
 	} else if hashType&sigHashMask == SigHashSingle && idx < len(tx.TxOut) {
 		var b bytes.Buffer
-		wire.WriteTxOut(&b, 0, 0, tx.TxOut[idx])
+		wire.WriteTxOut(&b, 0, 0, &tx.TxOut[idx])
 		sigHash.Write(chainhash.DoubleHashB(b.Bytes()))
 	} else {
 		sigHash.Write(zeroHash[:])
@@ -565,19 +566,15 @@ func shallowCopyTx(tx *wire.MsgTx) wire.MsgTx {
 	// allocations.
 	txCopy := wire.MsgTx{
 		Version:  tx.Version,
-		TxIn:     make([]*wire.TxIn, len(tx.TxIn)),
-		TxOut:    make([]*wire.TxOut, len(tx.TxOut)),
+		TxIn:     make([]wire.TxIn, len(tx.TxIn)),
+		TxOut:    make([]wire.TxOut, len(tx.TxOut)),
 		LockTime: tx.LockTime,
 	}
-	txIns := make([]wire.TxIn, len(tx.TxIn))
-	for i, oldTxIn := range tx.TxIn {
-		txIns[i] = *oldTxIn
-		txCopy.TxIn[i] = &txIns[i]
+	for i := range tx.TxIn {
+		txCopy.TxIn[i] = tx.TxIn[i]
 	}
-	txOuts := make([]wire.TxOut, len(tx.TxOut))
-	for i, oldTxOut := range tx.TxOut {
-		txOuts[i] = *oldTxOut
-		txCopy.TxOut[i] = &txOuts[i]
+	for i := range tx.TxOut {
+		txCopy.TxOut[i] = tx.TxOut[i]
 	}
 	return txCopy
 }
