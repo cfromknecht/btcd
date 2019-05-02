@@ -282,19 +282,19 @@ func NewTxOut(value int64, pkScript []byte) *TxOut {
 // inputs and outputs.
 type MsgTx struct {
 	Version  int32
-	TxIn     []*TxIn
-	TxOut    []*TxOut
+	TxIn     []TxIn
+	TxOut    []TxOut
 	LockTime uint32
 }
 
 // AddTxIn adds a transaction input to the message.
 func (msg *MsgTx) AddTxIn(ti *TxIn) {
-	msg.TxIn = append(msg.TxIn, ti)
+	msg.TxIn = append(msg.TxIn, *ti)
 }
 
 // AddTxOut adds a transaction output to the message.
 func (msg *MsgTx) AddTxOut(to *TxOut) {
-	msg.TxOut = append(msg.TxOut, to)
+	msg.TxOut = append(msg.TxOut, *to)
 }
 
 // TxHash generates the Hash for the transaction.
@@ -330,8 +330,8 @@ func (msg *MsgTx) Copy() *MsgTx {
 	// for the transaction inputs and outputs.
 	newTx := MsgTx{
 		Version:  msg.Version,
-		TxIn:     make([]*TxIn, 0, len(msg.TxIn)),
-		TxOut:    make([]*TxOut, 0, len(msg.TxOut)),
+		TxIn:     make([]TxIn, 0, len(msg.TxIn)),
+		TxOut:    make([]TxOut, 0, len(msg.TxOut)),
 		LockTime: msg.LockTime,
 	}
 
@@ -372,7 +372,7 @@ func (msg *MsgTx) Copy() *MsgTx {
 		}
 
 		// Finally, append this fully copied txin.
-		newTx.TxIn = append(newTx.TxIn, &newTxIn)
+		newTx.TxIn = append(newTx.TxIn, newTxIn)
 	}
 
 	// Deep copy the old TxOut data.
@@ -392,7 +392,7 @@ func (msg *MsgTx) Copy() *MsgTx {
 			Value:    oldTxOut.Value,
 			PkScript: newScript,
 		}
-		newTx.TxOut = append(newTx.TxOut, &newTxOut)
+		newTx.TxOut = append(newTx.TxOut, newTxOut)
 	}
 
 	return &newTx
@@ -474,13 +474,11 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 
 	// Deserialize the inputs.
 	var totalScriptSize uint64
-	txIns := make([]TxIn, count)
-	msg.TxIn = make([]*TxIn, count)
+	msg.TxIn = make([]TxIn, count)
 	for i := uint64(0); i < count; i++ {
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
-		ti := &txIns[i]
-		msg.TxIn[i] = ti
+		ti := &msg.TxIn[i]
 		err = readTxInBuf(r, pver, msg.Version, ti, buf, sbuf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
@@ -511,13 +509,11 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 	}
 
 	// Deserialize the outputs.
-	txOuts := make([]TxOut, count)
-	msg.TxOut = make([]*TxOut, count)
+	msg.TxOut = make([]TxOut, count)
 	for i := uint64(0); i < count; i++ {
 		// The pointer is set now in case a script buffer is borrowed
 		// and needs to be returned to the pool on error.
-		to := &txOuts[i]
-		msg.TxOut[i] = to
+		to := &msg.TxOut[i]
 		err = readTxOutBuf(r, pver, msg.Version, to, buf, sbuf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
@@ -531,7 +527,8 @@ func (msg *MsgTx) btcDecodeBuf(r io.Reader, pver uint32, enc MessageEncoding, b 
 	// If the transaction's flag byte isn't 0x00 at this point, then one or
 	// more of its inputs has accompanying witness data.
 	if flag[0] != 0 && enc == WitnessEncoding {
-		for _, txin := range msg.TxIn {
+		for i := range msg.TxIn {
+			txin := &msg.TxIn[i]
 			// For each input, the witness is encoded as a stack
 			// with one or more items. Therefore, we first read a
 			// varint which encodes the number of stack items.
@@ -721,7 +718,8 @@ func (msg *MsgTx) btcEncodeBuf(w io.Writer, pver uint32, enc MessageEncoding, b 
 		return err
 	}
 
-	for _, ti := range msg.TxIn {
+	for i := range msg.TxIn {
+		ti := &msg.TxIn[i]
 		err = writeTxInBuf(w, pver, msg.Version, ti, buf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
@@ -736,7 +734,8 @@ func (msg *MsgTx) btcEncodeBuf(w io.Writer, pver uint32, enc MessageEncoding, b 
 		return err
 	}
 
-	for _, to := range msg.TxOut {
+	for i := range msg.TxOut {
+		to := &msg.TxOut[i]
 		err = WriteTxOutBuf(w, pver, msg.Version, to, buf)
 		if err != nil {
 			binarySerializer.maybeReturn(b, buf)
@@ -912,8 +911,8 @@ func (msg *MsgTx) PkScriptLocs() []int {
 func NewMsgTx(version int32) *MsgTx {
 	return &MsgTx{
 		Version: version,
-		TxIn:    make([]*TxIn, 0, defaultTxInOutAlloc),
-		TxOut:   make([]*TxOut, 0, defaultTxInOutAlloc),
+		TxIn:    make([]TxIn, 0, defaultTxInOutAlloc),
+		TxOut:   make([]TxOut, 0, defaultTxInOutAlloc),
 	}
 }
 
@@ -994,6 +993,9 @@ func readScriptBuf(r io.Reader, pver uint32, b, s []byte, maxAllowed uint32, fie
 		return nil, messageError("readScript", str)
 	}
 
+	if count > uint64(len(s)) {
+		panic("ahhhhh")
+	}
 	_, err = io.ReadFull(r, s[:count])
 	if err != nil {
 		return nil, err

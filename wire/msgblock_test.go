@@ -506,7 +506,7 @@ var blockOne = MsgBlock{
 	Transactions: []*MsgTx{
 		{
 			Version: 1,
-			TxIn: []*TxIn{
+			TxIn: []TxIn{
 				{
 					PreviousOutPoint: OutPoint{
 						Hash:  chainhash.Hash{},
@@ -518,7 +518,7 @@ var blockOne = MsgBlock{
 					Sequence: 0xffffffff,
 				},
 			},
-			TxOut: []*TxOut{
+			TxOut: []TxOut{
 				{
 					Value: 0x12a05f200,
 					PkScript: []byte{

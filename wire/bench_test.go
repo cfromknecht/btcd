@@ -20,7 +20,7 @@ import (
 // the main network, regression test network, and test network (version 3).
 var genesisCoinbaseTx = MsgTx{
 	Version: 1,
-	TxIn: []*TxIn{
+	TxIn: []TxIn{
 		{
 			PreviousOutPoint: OutPoint{
 				Hash:  chainhash.Hash{},
@@ -41,7 +41,7 @@ var genesisCoinbaseTx = MsgTx{
 			Sequence: 0xffffffff,
 		},
 	},
-	TxOut: []*TxOut{
+	TxOut: []TxOut{
 		{
 			Value: 0x12a05f200,
 			PkScript: []byte{
@@ -438,7 +438,7 @@ func BenchmarkWriteTxOut(b *testing.B) {
 
 	txOut := blockOne.Transactions[0].TxOut[0]
 	for i := 0; i < b.N; i++ {
-		WriteTxOut(ioutil.Discard, 0, 0, txOut)
+		WriteTxOut(ioutil.Discard, 0, 0, &txOut)
 	}
 }
 
@@ -450,7 +450,7 @@ func BenchmarkWriteTxOutBuf(b *testing.B) {
 	buf := binarySerializer.Borrow()
 	txOut := blockOne.Transactions[0].TxOut[0]
 	for i := 0; i < b.N; i++ {
-		WriteTxOutBuf(ioutil.Discard, 0, 0, txOut, buf)
+		WriteTxOutBuf(ioutil.Discard, 0, 0, &txOut, buf)
 	}
 	binarySerializer.Return(buf)
 }
@@ -491,7 +491,7 @@ func BenchmarkWriteTxIn(b *testing.B) {
 	buf := binarySerializer.Borrow()
 	txIn := blockOne.Transactions[0].TxIn[0]
 	for i := 0; i < b.N; i++ {
-		writeTxInBuf(ioutil.Discard, 0, 0, txIn, buf)
+		writeTxInBuf(ioutil.Discard, 0, 0, &txIn, buf)
 	}
 	binarySerializer.Return(buf)
 }

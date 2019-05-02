@@ -114,14 +114,14 @@ func TestTx(t *testing.T) {
 
 	// Ensure transaction inputs are added properly.
 	msg.AddTxIn(txIn)
-	if !reflect.DeepEqual(msg.TxIn[0], txIn) {
+	if !reflect.DeepEqual(msg.TxIn[0], *txIn) {
 		t.Errorf("AddTxIn: wrong transaction input added - got %v, want %v",
 			spew.Sprint(msg.TxIn[0]), spew.Sprint(txIn))
 	}
 
 	// Ensure transaction outputs are added properly.
 	msg.AddTxOut(txOut)
-	if !reflect.DeepEqual(msg.TxOut[0], txOut) {
+	if !reflect.DeepEqual(msg.TxOut[0], *txOut) {
 		t.Errorf("AddTxIn: wrong transaction output added - got %v, want %v",
 			spew.Sprint(msg.TxOut[0]), spew.Sprint(txOut))
 	}
@@ -781,7 +781,7 @@ func TestTxWitnessSize(t *testing.T) {
 // multiTx is a MsgTx with an input and output and used in various tests.
 var multiTx = &MsgTx{
 	Version: 1,
-	TxIn: []*TxIn{
+	TxIn: []TxIn{
 		{
 			PreviousOutPoint: OutPoint{
 				Hash:  chainhash.Hash{},
@@ -793,7 +793,7 @@ var multiTx = &MsgTx{
 			Sequence: 0xffffffff,
 		},
 	},
-	TxOut: []*TxOut{
+	TxOut: []TxOut{
 		{
 			Value: 0x12a05f200,
 			PkScript: []byte{
@@ -881,7 +881,7 @@ var multiTxPkScriptLocs = []int{63, 139}
 // output used in various tests.
 var multiWitnessTx = &MsgTx{
 	Version: 1,
-	TxIn: []*TxIn{
+	TxIn: []TxIn{
 		{
 			PreviousOutPoint: OutPoint{
 				Hash: chainhash.Hash{
@@ -916,7 +916,7 @@ var multiWitnessTx = &MsgTx{
 			Sequence: 0xffffffff,
 		},
 	},
-	TxOut: []*TxOut{
+	TxOut: []TxOut{
 		{
 			Value: 395019,
 			PkScript: []byte{ // p2wkh output
