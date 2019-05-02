@@ -118,7 +118,7 @@ const (
 // fields.
 var witessMarkerBytes = []byte{0x00, 0x01}
 
-const scriptSlabSize = 1 << 20
+const scriptSlabSize = 1 << 22
 
 type scriptSlab [scriptSlabSize]byte
 
