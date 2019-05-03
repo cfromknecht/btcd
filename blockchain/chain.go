@@ -631,6 +631,11 @@ func (b *BlockChain) connectBlock(node *blockNode, block *btcutil.Block,
 			return err
 		}
 
+		err = dbStoreBlock(dbTx, block)
+		if err != nil {
+			return err
+		}
+
 		// Add the block hash and height to the block index which tracks
 		// the main chain.
 		err = dbPutBlockIndex(dbTx, block.Hash(), node.height)
@@ -1170,10 +1175,13 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 		// If this is fast add, or this block node isn't yet marked as
 		// valid, then we'll update its status and flush the state to
 		// disk again.
+		status := statusDataStored
 		if fastAdd || !b.index.NodeStatus(node.self).KnownValid() {
-			b.index.SetStatusFlags(node.self, statusValid)
-			flushIndexState()
+			status |= statusValid
 		}
+
+		b.index.SetStatusFlags(node.self, status)
+		flushIndexState()
 
 		return true, nil
 	}
