@@ -560,19 +560,13 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) connectBlock(node *blockNode, block *btcutil.Block,
-	view *UtxoViewpoint, stxos []SpentTxOut) error {
+	view *UtxoViewpoint, stxos []SpentTxOut, fastAdd bool) error {
 
 	// Make sure it's extending the end of the best chain.
 	prevHash := &block.MsgBlock().Header.PrevBlock
 	if !prevHash.IsEqual(&b.bestChain.Tip().hash) {
 		return AssertError("connectBlock must be called with a block " +
 			"that extends the main chain")
-	}
-
-	// Sanity check the correct number of stxos are provided.
-	if len(stxos) != countSpentOutputs(block) {
-		return AssertError("connectBlock called with inconsistent " +
-			"spent transaction out information")
 	}
 
 	// No warnings about unknown rules or versions until the chain is
@@ -610,6 +604,27 @@ func (b *BlockChain) connectBlock(node *blockNode, block *btcutil.Block,
 
 	// Atomically insert info into the database.
 	err = b.db.Update(func(dbTx database.Tx) error {
+		// In the fast add case the code to check the block connection
+		// was skipped, so the utxo view needs to load the referenced
+		// utxos, spend them, and add the new utxos being created by
+		// this block.
+		if fastAdd {
+			err := view.fetchInputUtxos(b.db, block)
+			if err != nil {
+				return err
+			}
+			err = view.connectTransactions(block, &stxos)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Sanity check the correct number of stxos are provided.
+		if len(stxos) != countSpentOutputs(block) {
+			return AssertError("connectBlock called with inconsistent " +
+				"spent transaction out information")
+		}
+
 		// Update best block state.
 		err := dbPutBestState(dbTx, state, &node.workSum)
 		if err != nil {
@@ -1055,7 +1070,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		}
 
 		// Update the database and chain state.
-		err = b.connectBlock(n, block, view, stxos)
+		err = b.connectBlock(n, block, view, stxos, false)
 		if err != nil {
 			return err
 		}
@@ -1135,23 +1150,8 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 			}
 		}
 
-		// In the fast add case the code to check the block connection
-		// was skipped, so the utxo view needs to load the referenced
-		// utxos, spend them, and add the new utxos being created by
-		// this block.
-		if fastAdd {
-			err := view.fetchInputUtxos(b.db, block)
-			if err != nil {
-				return false, err
-			}
-			err = view.connectTransactions(block, &stxos)
-			if err != nil {
-				return false, err
-			}
-		}
-
 		// Connect the block to the main chain.
-		err := b.connectBlock(node, block, view, stxos)
+		err := b.connectBlock(node, block, view, stxos, fastAdd)
 		if err != nil {
 			// If we got hit with a rule error, then we'll mark
 			// that status of the block as invalid and flush the
