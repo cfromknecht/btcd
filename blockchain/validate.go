@@ -665,7 +665,7 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 
 		// Ensure the timestamp for the block header is after the
 		// median time of the last several blocks (medianTimeBlocks).
-		medianTime := prevNode.CalcPastMedianTime()
+		medianTime := b.index.CalcPastMedianTime(prevNode)
 		if !header.Timestamp.After(medianTime) {
 			str := "block timestamp of %v is not after expected %v"
 			str = fmt.Sprintf(str, header.Timestamp, medianTime)
@@ -750,7 +750,7 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		// timestamps for all lock-time based checks.
 		blockTime := header.Timestamp
 		if csvState == ThresholdActive {
-			blockTime = prevNode.CalcPastMedianTime()
+			blockTime = b.index.CalcPastMedianTime(prevNode)
 		}
 
 		// The height of this block is one more than the referenced
@@ -1192,7 +1192,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 		// We obtain the MTP of the *previous* block in order to
 		// determine if transactions in the current block are final.
-		medianTime := node.parent.CalcPastMedianTime()
+		medianTime := b.index.CalcPastMedianTime(parent)
 
 		// Additionally, if the CSV soft-fork package is now active,
 		// then we also enforce the relative sequence number based

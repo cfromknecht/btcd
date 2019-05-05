@@ -164,13 +164,13 @@ func TestCalcSequenceLock(t *testing.T) {
 	// The MTP for the input is the MTP from the PoV of the block *prior*
 	// to the one that included it.
 	ancestor := chain.index.RelativeAncestor(node, 5)
-	medianTime := ancestor.CalcPastMedianTime().Unix()
+	medianTime := chain.index.CalcPastMedianTime(ancestor).Unix()
 
 	// The median time calculated from the PoV of the best block in the
 	// test chain.  For unconfirmed inputs, this value will be used since
 	// the MTP will be calculated from the PoV of the yet-to-be-mined
 	// block.
-	nextMedianTime := node.CalcPastMedianTime().Unix()
+	nextMedianTime := chain.index.CalcPastMedianTime(node).Unix()
 	nextBlockHeight := int32(numBlocksToActivate) + 1
 
 	// Add an additional transaction which will serve as our unconfirmed
