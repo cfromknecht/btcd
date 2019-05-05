@@ -32,9 +32,9 @@ func chainedNodes(index *blockIndex, parent *blockNode, numNodes int) []*blockNo
 			header.PrevBlock = tip.hash
 		}
 		node := newBlockNode(&header, tip)
-		index.AddNode(node)
-		nodes[i] = node
-		tip = node
+		index.AddNode(&node)
+		nodes[i] = &node
+		tip = &node
 	}
 	return nodes
 }

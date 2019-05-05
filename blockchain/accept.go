@@ -67,7 +67,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	newNode := newBlockNode(blockHeader, prevNode)
 	newNode.status = statusDataStored
 
-	b.index.AddNode(newNode)
+	b.index.AddNode(&newNode)
 	err = b.index.flushToDB()
 	if err != nil {
 		return false, err
@@ -76,7 +76,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	// Connect the passed block to the chain while respecting proper chain
 	// selection according to the chain with the most proof of work.  This
 	// also handles validation of the transaction scripts.
-	isMainChain, err := b.connectBestChain(newNode, block, flags)
+	isMainChain, err := b.connectBestChain(&newNode, block, flags)
 	if err != nil {
 		return false, err
 	}

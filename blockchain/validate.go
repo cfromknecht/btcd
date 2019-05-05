@@ -1280,5 +1280,5 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *btcutil.Block) error {
 	view := NewUtxoViewpoint()
 	view.SetBestHash(&tip.hash)
 	newNode := newBlockNode(&header, tip)
-	return b.checkConnectBlock(newNode, block, view, nil)
+	return b.checkConnectBlock(&newNode, block, view, nil)
 }
