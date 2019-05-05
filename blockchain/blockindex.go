@@ -150,6 +150,10 @@ func (node *blockNode) Header() wire.BlockHeader {
 	}
 }
 
+func (bi *blockIndex) Parent(node *blockNode) *blockNode {
+	return node.parent
+}
+
 // Ancestor returns the ancestor block node at the provided height by following
 // the chain backwards from this node.  The returned block will be nil when a
 // height is requested that is after the height of the passed node or is less
