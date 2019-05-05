@@ -186,7 +186,7 @@ func (bi *blockIndex) RelativeAncestor(node *blockNode, distance int32) *blockNo
 // prior to, and including, the block node.
 //
 // This function is safe for concurrent access.
-func (node *blockNode) CalcPastMedianTime() time.Time {
+func (bi *blockIndex) CalcPastMedianTime(node *blockNode) time.Time {
 	// Create a slice of the previous few block timestamps used to calculate
 	// the median per the number defined by the constant medianTimeBlocks.
 	timestamps := make([]int64, medianTimeBlocks)

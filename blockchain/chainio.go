@@ -1245,7 +1245,7 @@ func (b *BlockChain) initChainState() error {
 		blockWeight := uint64(GetBlockWeight(btcutil.NewBlock(&block)))
 		numTxns := uint64(len(block.Transactions))
 		b.stateSnapshot = newBestState(tip, blockSize, blockWeight,
-			numTxns, state.totalTxns, tip.CalcPastMedianTime())
+			numTxns, state.totalTxns, b.index.CalcPastMedianTime(tip))
 
 		return nil
 	})
