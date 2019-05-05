@@ -178,7 +178,7 @@ func (node *blockNode) Ancestor(height int32) *blockNode {
 // height minus provided distance.
 //
 // This function is safe for concurrent access.
-func (node *blockNode) RelativeAncestor(distance int32) *blockNode {
+func (bi *blockIndex) RelativeAncestor(node *blockNode, distance int32) *blockNode {
 	return node.Ancestor(node.height - distance)
 }
 

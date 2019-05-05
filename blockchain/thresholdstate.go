@@ -167,7 +167,7 @@ func (b *BlockChain) thresholdState(prevNode *blockNode, checker thresholdCondit
 
 		// Get the ancestor that is the last block of the previous
 		// confirmation window.
-		prevNode = prevNode.RelativeAncestor(confirmationWindow)
+		prevNode = b.index.RelativeAncestor(prevNode, confirmationWindow)
 	}
 
 	// Start with the threshold state for the most recent confirmation
