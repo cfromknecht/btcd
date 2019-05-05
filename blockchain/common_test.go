@@ -364,7 +364,7 @@ func newFakeChain(params *chaincfg.Params) *BlockChain {
 		maxRetargetTimespan: targetTimespan * adjustmentFactor,
 		blocksPerRetarget:   int32(targetTimespan / targetTimePerBlock),
 		index:               index,
-		bestChain:           newChainView(node),
+		bestChain:           newChainView(node, index),
 		warningCaches:       newThresholdCaches(vbNumBits),
 		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 	}

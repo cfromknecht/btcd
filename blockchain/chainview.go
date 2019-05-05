@@ -42,6 +42,8 @@ func fastLog2Floor(n uint32) uint8 {
 // The chain view for the branch ending in 6a consists of:
 //   genesis -> 1 -> 2 -> 3 -> 4a -> 5a -> 6a
 type chainView struct {
+	index *blockIndex
+
 	mtx   sync.Mutex
 	nodes []*blockNode
 }
@@ -49,9 +51,11 @@ type chainView struct {
 // newChainView returns a new chain view for the given tip block node.  Passing
 // nil as the tip will result in a chain view that is not initialized.  The tip
 // can be updated at any time via the setTip function.
-func newChainView(tip *blockNode) *chainView {
+func newChainView(tip *blockNode, index *blockIndex) *chainView {
 	// The mutex is intentionally not held since this is a constructor.
-	var c chainView
+	c := chainView{
+		index: index,
+	}
 	c.setTip(tip)
 	return &c
 }

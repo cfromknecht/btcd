@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 )
 
@@ -20,7 +21,7 @@ var testNoncePrng = rand.New(rand.NewSource(0))
 // chainedNodes returns the specified number of nodes constructed such that each
 // subsequent node points to the previous one to create a chain.  The first node
 // will point to the passed parent which can be nil if desired.
-func chainedNodes(parent *blockNode, numNodes int) []*blockNode {
+func chainedNodes(index *blockIndex, parent *blockNode, numNodes int) []*blockNode {
 	nodes := make([]*blockNode, numNodes)
 	tip := parent
 	for i := 0; i < numNodes; i++ {
@@ -30,8 +31,10 @@ func chainedNodes(parent *blockNode, numNodes int) []*blockNode {
 		if tip != nil {
 			header.PrevBlock = tip.hash
 		}
-		nodes[i] = newBlockNode(&header, tip)
-		tip = nodes[i]
+		node := newBlockNode(&header, tip)
+		index.AddNode(node)
+		nodes[i] = node
+		tip = node
 	}
 	return nodes
 }
@@ -68,6 +71,13 @@ func zipLocators(locators ...BlockLocator) BlockLocator {
 	return hashes
 }
 
+func setupIndex() *blockIndex {
+	params := &chaincfg.SimNetParams
+	index := newBlockIndex(nil, params)
+
+	return index
+}
+
 // TestChainView ensures all of the exported functionality of chain views works
 // as intended with the exception of some special cases which are handled in
 // other tests.
@@ -77,9 +87,10 @@ func TestChainView(t *testing.T) {
 	// 0 -> 1 -> 2  -> 3  -> 4
 	//       \-> 2a -> 3a -> 4a  -> 5a -> 6a -> 7a -> ... -> 26a
 	//             \-> 3a'-> 4a' -> 5a'
-	branch0Nodes := chainedNodes(nil, 5)
-	branch1Nodes := chainedNodes(branch0Nodes[1], 25)
-	branch2Nodes := chainedNodes(branch1Nodes[0], 3)
+	index := setupIndex()
+	branch0Nodes := chainedNodes(index, nil, 5)
+	branch1Nodes := chainedNodes(index, branch0Nodes[1], 25)
+	branch2Nodes := chainedNodes(index, branch1Nodes[0], 3)
 
 	tip := tstTip
 	tests := []struct {
@@ -100,32 +111,32 @@ func TestChainView(t *testing.T) {
 			// Create a view for branch 0 as the active chain and
 			// another view for branch 1 as the side chain.
 			name:       "chain0-chain1",
-			view:       newChainView(tip(branch0Nodes)),
+			view:       newChainView(tip(branch0Nodes), index),
 			genesis:    branch0Nodes[0],
 			tip:        tip(branch0Nodes),
-			side:       newChainView(tip(branch1Nodes)),
+			side:       newChainView(tip(branch1Nodes), index),
 			sideTip:    tip(branch1Nodes),
 			fork:       branch0Nodes[1],
 			contains:   branch0Nodes,
 			noContains: branch1Nodes,
-			equal:      newChainView(tip(branch0Nodes)),
-			unequal:    newChainView(tip(branch1Nodes)),
+			equal:      newChainView(tip(branch0Nodes), index),
+			unequal:    newChainView(tip(branch1Nodes), index),
 			locator:    locatorHashes(branch0Nodes, 4, 3, 2, 1, 0),
 		},
 		{
 			// Create a view for branch 1 as the active chain and
 			// another view for branch 2 as the side chain.
 			name:       "chain1-chain2",
-			view:       newChainView(tip(branch1Nodes)),
+			view:       newChainView(tip(branch1Nodes), index),
 			genesis:    branch0Nodes[0],
 			tip:        tip(branch1Nodes),
-			side:       newChainView(tip(branch2Nodes)),
+			side:       newChainView(tip(branch2Nodes), index),
 			sideTip:    tip(branch2Nodes),
 			fork:       branch1Nodes[0],
 			contains:   branch1Nodes,
 			noContains: branch2Nodes,
-			equal:      newChainView(tip(branch1Nodes)),
-			unequal:    newChainView(tip(branch2Nodes)),
+			equal:      newChainView(tip(branch1Nodes), index),
+			unequal:    newChainView(tip(branch2Nodes), index),
 			locator: zipLocators(
 				locatorHashes(branch1Nodes, 24, 23, 22, 21, 20,
 					19, 18, 17, 16, 15, 14, 13, 11, 7),
@@ -135,16 +146,16 @@ func TestChainView(t *testing.T) {
 			// Create a view for branch 2 as the active chain and
 			// another view for branch 0 as the side chain.
 			name:       "chain2-chain0",
-			view:       newChainView(tip(branch2Nodes)),
+			view:       newChainView(tip(branch2Nodes), index),
 			genesis:    branch0Nodes[0],
 			tip:        tip(branch2Nodes),
-			side:       newChainView(tip(branch0Nodes)),
+			side:       newChainView(tip(branch0Nodes), index),
 			sideTip:    tip(branch0Nodes),
 			fork:       branch0Nodes[1],
 			contains:   branch2Nodes,
 			noContains: branch0Nodes[2:],
-			equal:      newChainView(tip(branch2Nodes)),
-			unequal:    newChainView(tip(branch0Nodes)),
+			equal:      newChainView(tip(branch2Nodes), index),
+			unequal:    newChainView(tip(branch0Nodes), index),
 			locator: zipLocators(
 				locatorHashes(branch2Nodes, 2, 1, 0),
 				locatorHashes(branch1Nodes, 0),
@@ -305,13 +316,15 @@ testLoop:
 // works in some corner cases such as when the two chains have completely
 // unrelated histories.
 func TestChainViewForkCorners(t *testing.T) {
+	index := setupIndex()
+
 	// Construct two unrelated single branch synthetic block indexes.
-	branchNodes := chainedNodes(nil, 5)
-	unrelatedBranchNodes := chainedNodes(nil, 7)
+	branchNodes := chainedNodes(index, nil, 5)
+	unrelatedBranchNodes := chainedNodes(index, nil, 7)
 
 	// Create chain views for the two unrelated histories.
-	view1 := newChainView(tstTip(branchNodes))
-	view2 := newChainView(tstTip(unrelatedBranchNodes))
+	view1 := newChainView(tstTip(branchNodes), index)
+	view2 := newChainView(tstTip(unrelatedBranchNodes), index)
 
 	// Ensure attempting to find a fork point with a node that doesn't exist
 	// doesn't produce a node.
@@ -342,8 +355,9 @@ func TestChainViewSetTip(t *testing.T) {
 	// structure.
 	// 0 -> 1 -> 2  -> 3  -> 4
 	//       \-> 2a -> 3a -> 4a  -> 5a -> 6a -> 7a -> ... -> 26a
-	branch0Nodes := chainedNodes(nil, 5)
-	branch1Nodes := chainedNodes(branch0Nodes[1], 25)
+	index := setupIndex()
+	branch0Nodes := chainedNodes(index, nil, 5)
+	branch1Nodes := chainedNodes(index, branch0Nodes[1], 25)
 
 	tip := tstTip
 	tests := []struct {
@@ -356,7 +370,7 @@ func TestChainViewSetTip(t *testing.T) {
 			// Create an empty view and set the tip to increasingly
 			// longer chains.
 			name:     "increasing",
-			view:     newChainView(nil),
+			view:     newChainView(nil, index),
 			tips:     []*blockNode{tip(branch0Nodes), tip(branch1Nodes)},
 			contains: [][]*blockNode{branch0Nodes, branch1Nodes},
 		},
@@ -364,7 +378,7 @@ func TestChainViewSetTip(t *testing.T) {
 			// Create a view with a longer chain and set the tip to
 			// increasingly shorter chains.
 			name:     "decreasing",
-			view:     newChainView(tip(branch1Nodes)),
+			view:     newChainView(tip(branch1Nodes), index),
 			tips:     []*blockNode{tip(branch0Nodes), nil},
 			contains: [][]*blockNode{branch0Nodes, nil},
 		},
@@ -373,7 +387,7 @@ func TestChainViewSetTip(t *testing.T) {
 			// a longer chain followed by setting it back to the
 			// shorter chain.
 			name:     "small-large-small",
-			view:     newChainView(tip(branch0Nodes)),
+			view:     newChainView(tip(branch0Nodes), index),
 			tips:     []*blockNode{tip(branch1Nodes), tip(branch0Nodes)},
 			contains: [][]*blockNode{branch1Nodes, branch0Nodes},
 		},
@@ -382,7 +396,7 @@ func TestChainViewSetTip(t *testing.T) {
 			// a smaller chain followed by setting it back to the
 			// longer chain.
 			name:     "large-small-large",
-			view:     newChainView(tip(branch1Nodes)),
+			view:     newChainView(tip(branch1Nodes), index),
 			tips:     []*blockNode{tip(branch0Nodes), tip(branch1Nodes)},
 			contains: [][]*blockNode{branch0Nodes, branch1Nodes},
 		},
@@ -416,9 +430,11 @@ testLoop:
 // TestChainViewNil ensures that creating and accessing a nil chain view behaves
 // as expected.
 func TestChainViewNil(t *testing.T) {
+	index := setupIndex()
+
 	// Ensure two unininitialized views are considered equal.
-	view := newChainView(nil)
-	if !view.Equals(newChainView(nil)) {
+	view := newChainView(nil, index)
+	if !view.Equals(newChainView(nil, nil)) {
 		t.Fatal("uninitialized nil views unequal")
 	}
 
@@ -445,7 +461,7 @@ func TestChainViewNil(t *testing.T) {
 	}
 
 	// Ensure an uninitialized view does not report it contains nodes.
-	fakeNode := chainedNodes(nil, 1)[0]
+	fakeNode := chainedNodes(index, nil, 1)[0]
 	if view.Contains(fakeNode) {
 		t.Fatalf("Contains: view claims it contains node %v", fakeNode)
 	}
@@ -476,7 +492,7 @@ func TestChainViewNil(t *testing.T) {
 
 	// Ensure attempting to get a block locator for a node that exists still
 	// works as intended.
-	branchNodes := chainedNodes(nil, 50)
+	branchNodes := chainedNodes(index, nil, 50)
 	wantLocator := locatorHashes(branchNodes, 49, 48, 47, 46, 45, 44, 43,
 		42, 41, 40, 39, 38, 36, 32, 24, 8, 0)
 	locator := view.BlockLocator(tstTip(branchNodes))
