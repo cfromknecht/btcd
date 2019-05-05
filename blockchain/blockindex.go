@@ -16,6 +16,8 @@ import (
 	"github.com/btcsuite/btcd/work"
 )
 
+const preallocBlockNodes = 600000
+
 // blockStatus is a bit field representing the validation state of the block.
 type blockStatus byte
 
@@ -60,6 +62,8 @@ func (status blockStatus) KnownInvalid() bool {
 	return status&(statusValidateFailed|statusInvalidAncestor) != 0
 }
 
+type blockPtr uint32
+
 // blockNode represents a block within the block chain and is primarily used to
 // aid in selecting the best chain to be the main chain.  The main chain is
 // stored into the block database.
@@ -71,8 +75,10 @@ type blockNode struct {
 	// hundreds of thousands of these in memory, so a few extra bytes of
 	// padding adds up.
 
+	self blockPtr
+
 	// parent is the parent block for this node.
-	parent *blockNode
+	parent blockPtr
 
 	// hash is the double sha 256 of the block.
 	hash chainhash.Hash
@@ -116,7 +122,7 @@ func initBlockNode(node *blockNode, blockHeader *wire.BlockHeader, parent *block
 		merkleRoot: blockHeader.MerkleRoot,
 	}
 	if parent != nil {
-		node.parent = parent
+		node.parent = parent.self
 		node.height = parent.height + 1
 		node.workSum = *node.workSum.Add(&parent.workSum)
 	}
@@ -137,8 +143,8 @@ func newBlockNode(blockHeader *wire.BlockHeader, parent *blockNode) *blockNode {
 func (bi *blockIndex) Header(node *blockNode) wire.BlockHeader {
 	// No lock is needed because all accessed fields are immutable.
 	prevHash := &zeroHash
-	if node.parent != nil {
-		prevHash = &node.parent.hash
+	if node.parent != 0 {
+		prevHash = &bi.nodes[node.parent].hash
 	}
 	return wire.BlockHeader{
 		Version:    node.version,
@@ -151,7 +157,17 @@ func (bi *blockIndex) Header(node *blockNode) wire.BlockHeader {
 }
 
 func (bi *blockIndex) Parent(node *blockNode) *blockNode {
-	return node.parent
+	if node.parent != 0 {
+		return &bi.nodes[node.parent]
+	}
+	return nil
+}
+
+func (bi *blockIndex) Node(index blockPtr) *blockNode {
+	if index != 0 {
+		return &bi.nodes[index]
+	}
+	return nil
 }
 
 // Ancestor returns the ancestor block node at the provided height by following
@@ -166,7 +182,7 @@ func (bi *blockIndex) Ancestor(node *blockNode, height int32) *blockNode {
 	}
 
 	n := node
-	for ; n != nil && n.height != height; n = n.parent {
+	for ; n.parent != 0 && n.height != height; n = &bi.nodes[n.parent] {
 		// Intentionally left blank
 	}
 
@@ -192,11 +208,11 @@ func (bi *blockIndex) CalcPastMedianTime(node *blockNode) time.Time {
 	timestamps := make([]int64, medianTimeBlocks)
 	numNodes := 0
 	iterNode := node
-	for i := 0; i < medianTimeBlocks && iterNode != nil; i++ {
+	for i := 0; i < medianTimeBlocks && iterNode.self != 0; i++ {
 		timestamps[i] = iterNode.timestamp
 		numNodes++
 
-		iterNode = iterNode.parent
+		iterNode = &bi.nodes[iterNode.parent]
 	}
 
 	// Prune the slice to the actual number of available timestamps which
@@ -234,8 +250,9 @@ type blockIndex struct {
 	chainParams *chaincfg.Params
 
 	sync.RWMutex
-	index map[chainhash.Hash]*blockNode
-	dirty map[*blockNode]struct{}
+	nodes []blockNode
+	index map[chainhash.Hash]blockPtr
+	dirty map[blockPtr]struct{}
 }
 
 // newBlockIndex returns a new empty instance of a block index.  The index will
@@ -245,8 +262,9 @@ func newBlockIndex(db database.DB, chainParams *chaincfg.Params) *blockIndex {
 	return &blockIndex{
 		db:          db,
 		chainParams: chainParams,
-		index:       make(map[chainhash.Hash]*blockNode),
-		dirty:       make(map[*blockNode]struct{}),
+		nodes:       make([]blockNode, 1, preallocBlockNodes),
+		index:       make(map[chainhash.Hash]blockPtr),
+		dirty:       make(map[blockPtr]struct{}),
 	}
 }
 
@@ -265,8 +283,11 @@ func (bi *blockIndex) HaveBlock(hash *chainhash.Hash) bool {
 //
 // This function is safe for concurrent access.
 func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
+	var node *blockNode
 	bi.RLock()
-	node := bi.index[*hash]
+	if index, ok := bi.index[*hash]; ok {
+		node = &bi.nodes[index]
+	}
 	bi.RUnlock()
 	return node
 }
@@ -278,7 +299,7 @@ func (bi *blockIndex) LookupNode(hash *chainhash.Hash) *blockNode {
 func (bi *blockIndex) AddNode(node *blockNode) {
 	bi.Lock()
 	bi.addNode(node)
-	bi.dirty[node] = struct{}{}
+	bi.dirty[node.self] = struct{}{}
 	bi.Unlock()
 }
 
@@ -287,7 +308,9 @@ func (bi *blockIndex) AddNode(node *blockNode) {
 //
 // This function is NOT safe for concurrent access.
 func (bi *blockIndex) addNode(node *blockNode) {
-	bi.index[node.hash] = node
+	node.self = blockPtr(len(bi.nodes))
+	bi.nodes = append(bi.nodes, *node)
+	bi.index[node.hash] = node.self
 }
 
 // NodeStatus provides concurrent-safe access to the status field of a node.
@@ -295,7 +318,7 @@ func (bi *blockIndex) addNode(node *blockNode) {
 // This function is safe for concurrent access.
 func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 	bi.RLock()
-	status := node.status
+	status := bi.nodes[node.self].status
 	bi.RUnlock()
 	return status
 }
@@ -307,8 +330,8 @@ func (bi *blockIndex) NodeStatus(node *blockNode) blockStatus {
 // This function is safe for concurrent access.
 func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
-	node.status |= flags
-	bi.dirty[node] = struct{}{}
+	bi.nodes[node.self].status |= flags
+	bi.dirty[node.self] = struct{}{}
 	bi.Unlock()
 }
 
@@ -318,8 +341,8 @@ func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 // This function is safe for concurrent access.
 func (bi *blockIndex) UnsetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
-	node.status &^= flags
-	bi.dirty[node] = struct{}{}
+	bi.nodes[node.self].status &^= flags
+	bi.dirty[node.self] = struct{}{}
 	bi.Unlock()
 }
 
@@ -333,7 +356,8 @@ func (bi *blockIndex) flushToDB() error {
 	}
 
 	err := bi.db.Update(func(dbTx database.Tx) error {
-		for node := range bi.dirty {
+		for index := range bi.dirty {
+			node := &bi.nodes[index]
 			err := dbStoreBlockNode(dbTx, node, bi.Header(node))
 			if err != nil {
 				return err
@@ -344,7 +368,7 @@ func (bi *blockIndex) flushToDB() error {
 
 	// If write was successful, clear the dirty set.
 	if err == nil {
-		bi.dirty = make(map[*blockNode]struct{})
+		bi.dirty = make(map[blockPtr]struct{})
 	}
 
 	bi.Unlock()

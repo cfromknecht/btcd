@@ -1008,10 +1008,10 @@ func (b *BlockChain) createChainState() error {
 	header := &genesisBlock.MsgBlock().Header
 	node := newBlockNode(header, nil)
 	node.status = statusDataStored | statusValid
-	b.bestChain.SetTip(node)
 
 	// Add the new node to the index which is used for faster lookups.
 	b.index.addNode(node)
+	b.bestChain.SetTip(node)
 
 	// Initialize the state related to the best block.  Since it is the
 	// genesis block, use its timestamp for the median time.

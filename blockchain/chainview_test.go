@@ -181,13 +181,13 @@ testLoop:
 
 		// Ensure the active and side chain genesis block is the
 		// expected value.
-		if test.view.Genesis() != test.genesis {
+		if !reflect.DeepEqual(test.view.Genesis(), test.genesis) {
 			t.Errorf("%s: unexpected active view genesis -- got "+
 				"%v, want %v", test.name, test.view.Genesis(),
 				test.genesis)
 			continue
 		}
-		if test.side.Genesis() != test.genesis {
+		if !reflect.DeepEqual(test.side.Genesis(), test.genesis) {
 			t.Errorf("%s: unexpected side view genesis -- got %v, "+
 				"want %v", test.name, test.view.Genesis(),
 				test.genesis)
@@ -195,12 +195,12 @@ testLoop:
 		}
 
 		// Ensure the active and side chain tips are the expected nodes.
-		if test.view.Tip() != test.tip {
+		if !reflect.DeepEqual(test.view.Tip(), test.tip) {
 			t.Errorf("%s: unexpected active view tip -- got %v, "+
 				"want %v", test.name, test.view.Tip(), test.tip)
 			continue
 		}
-		if test.side.Tip() != test.sideTip {
+		if !reflect.DeepEqual(test.side.Tip(), test.sideTip) {
 			t.Errorf("%s: unexpected active view tip -- got %v, "+
 				"want %v", test.name, test.side.Tip(),
 				test.sideTip)
@@ -210,14 +210,14 @@ testLoop:
 		// Ensure that regardless of the order the two chains are
 		// compared they both return the expected fork point.
 		forkNode := test.view.FindFork(test.side.Tip())
-		if forkNode != test.fork {
+		if !reflect.DeepEqual(forkNode, test.fork) {
 			t.Errorf("%s: unexpected fork node (view, side) -- "+
 				"got %v, want %v", test.name, forkNode,
 				test.fork)
 			continue
 		}
 		forkNode = test.side.FindFork(test.view.Tip())
-		if forkNode != test.fork {
+		if !reflect.DeepEqual(forkNode, test.fork) {
 			t.Errorf("%s: unexpected fork node (side, view) -- "+
 				"got %v, want %v", test.name, forkNode,
 				test.fork)
@@ -227,7 +227,7 @@ testLoop:
 		// Ensure that the fork point for a node that is already part
 		// of the chain view is the node itself.
 		forkNode = test.view.FindFork(test.view.Tip())
-		if forkNode != test.view.Tip() {
+		if !reflect.DeepEqual(forkNode, test.view.Tip()) {
 			t.Errorf("%s: unexpected fork node (view, tip) -- "+
 				"got %v, want %v", test.name, forkNode,
 				test.view.Tip())
@@ -272,7 +272,8 @@ testLoop:
 			if i < len(test.contains)-1 {
 				expected = test.contains[i+1]
 			}
-			if next := test.view.Next(node); next != expected {
+			next := test.view.Next(node)
+			if !reflect.DeepEqual(next, expected) {
 				t.Errorf("%s: unexpected next node -- got %v, "+
 					"want %v", test.name, next, expected)
 				continue testLoop
@@ -293,7 +294,7 @@ testLoop:
 		// height.
 		for _, wantNode := range test.contains {
 			node := test.view.NodeByHeight(wantNode.height)
-			if node != wantNode {
+			if !reflect.DeepEqual(node, wantNode) {
 				t.Errorf("%s: unexpected node for height %d -- "+
 					"got %v, want %v", test.name,
 					wantNode.height, node, wantNode)
@@ -407,7 +408,7 @@ testLoop:
 		for i, tip := range test.tips {
 			// Ensure the view tip is the expected node.
 			test.view.SetTip(tip)
-			if test.view.Tip() != tip {
+			if !reflect.DeepEqual(test.view.Tip(), tip) {
 				t.Errorf("%s: unexpected view tip -- got %v, "+
 					"want %v", test.name, test.view.Tip(),
 					tip)

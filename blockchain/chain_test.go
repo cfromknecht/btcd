@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -464,6 +465,15 @@ func nodeHeaders(index *blockIndex, nodes []*blockNode,
 	return headers
 }
 
+type locateInvTest struct {
+	name       string
+	locator    BlockLocator       // locator for requested inventory
+	hashStop   chainhash.Hash     // stop hash for locator
+	maxAllowed uint32             // max to locate, 0 = wire const
+	headers    []wire.BlockHeader // expected located headers
+	hashes     []chainhash.Hash   // expected located hashes
+}
+
 // TestLocateInventory ensures that locating inventory via the LocateHeaders and
 // LocateBlocks functions behaves as expected.
 func TestLocateInventory(t *testing.T) {
@@ -487,14 +497,7 @@ func TestLocateInventory(t *testing.T) {
 	unrelatedBranchNodes := chainedNodes(chain.index, nil, 5)
 	unrelatedView := newChainView(tip(unrelatedBranchNodes), chain.index)
 
-	tests := []struct {
-		name       string
-		locator    BlockLocator       // locator for requested inventory
-		hashStop   chainhash.Hash     // stop hash for locator
-		maxAllowed uint32             // max to locate, 0 = wire const
-		headers    []wire.BlockHeader // expected located headers
-		hashes     []chainhash.Hash   // expected located hashes
-	}{
+	tests := []locateInvTest{
 		{
 			// Empty block locators and unknown stop hash.  No
 			// inventory should be located.
@@ -764,37 +767,44 @@ func TestLocateInventory(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		// Ensure the expected headers are located.
-		var headers []wire.BlockHeader
-		if test.maxAllowed != 0 {
-			// Need to use the unexported function to override the
-			// max allowed for headers.
-			chain.chainLock.RLock()
-			headers = chain.locateHeaders(test.locator,
-				&test.hashStop, test.maxAllowed)
-			chain.chainLock.RUnlock()
-		} else {
-			headers = chain.LocateHeaders(test.locator,
-				&test.hashStop)
-		}
-		if !reflect.DeepEqual(headers, test.headers) {
-			t.Errorf("%s: unxpected headers -- got %v, want %v",
-				test.name, headers, test.headers)
-			continue
-		}
+		t.Run(test.name, func(t *testing.T) {
+			testLocateInventory(t, chain, test)
+		})
+	}
+}
 
-		// Ensure the expected block hashes are located.
-		maxAllowed := uint32(wire.MaxBlocksPerMsg)
-		if test.maxAllowed != 0 {
-			maxAllowed = test.maxAllowed
-		}
-		hashes := chain.LocateBlocks(test.locator, &test.hashStop,
-			maxAllowed)
-		if !reflect.DeepEqual(hashes, test.hashes) {
-			t.Errorf("%s: unxpected hashes -- got %v, want %v",
-				test.name, hashes, test.hashes)
-			continue
-		}
+func testLocateInventory(t *testing.T, chain *BlockChain, test locateInvTest) {
+	// Ensure the expected headers are located.
+	var headers []wire.BlockHeader
+	if test.maxAllowed != 0 {
+		fmt.Printf("internal\n")
+		// Need to use the unexported function to override the
+		// max allowed for headers.
+		chain.chainLock.RLock()
+		headers = chain.locateHeaders(test.locator,
+			&test.hashStop, test.maxAllowed)
+		chain.chainLock.RUnlock()
+	} else {
+		fmt.Printf("external\n")
+		headers = chain.LocateHeaders(test.locator,
+			&test.hashStop)
+	}
+	if !reflect.DeepEqual(headers, test.headers) {
+		t.Errorf("unxpected headers -- got %v, want %v",
+			headers, test.headers)
+		return
+	}
+
+	// Ensure the expected block hashes are located.
+	maxAllowed := uint32(wire.MaxBlocksPerMsg)
+	if test.maxAllowed != 0 {
+		maxAllowed = test.maxAllowed
+	}
+	hashes := chain.LocateBlocks(test.locator, &test.hashStop,
+		maxAllowed)
+	if !reflect.DeepEqual(hashes, test.hashes) {
+		t.Errorf("unxpected hashes -- got %v, want %v",
+			hashes, test.hashes)
 	}
 }
 
