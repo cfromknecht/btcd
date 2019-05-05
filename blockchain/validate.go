@@ -1054,7 +1054,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 	// Query for the Version Bits state for the segwit soft-fork
 	// deployment. If segwit is active, we'll switch over to enforcing all
 	// the new rules.
-	segwitState, err := b.deploymentState(node.parent, chaincfg.DeploymentSegwit)
+	parent := b.index.Parent(node)
+	segwitState, err := b.deploymentState(parent, chaincfg.DeploymentSegwit)
 	if err != nil {
 		return err
 	}
@@ -1179,7 +1180,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
 	// the soft-fork deployment is fully active.
-	csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
+	csvState, err := b.deploymentState(parent, chaincfg.DeploymentCSV)
 	if err != nil {
 		return err
 	}
