@@ -45,7 +45,7 @@ type chainView struct {
 	index *blockIndex
 
 	mtx   sync.Mutex
-	nodes []*blockNode
+	nodes []blockPtr
 }
 
 // newChainView returns a new chain view for the given tip block node.  Passing
@@ -70,7 +70,7 @@ func (c *chainView) genesis() *blockNode {
 		return nil
 	}
 
-	return c.nodes[0]
+	return c.index.Node(c.nodes[0])
 }
 
 // Genesis returns the genesis block for the chain view.
@@ -93,7 +93,7 @@ func (c *chainView) tip() *blockNode {
 		return nil
 	}
 
-	return c.nodes[len(c.nodes)-1]
+	return c.index.Node(c.nodes[len(c.nodes)-1])
 }
 
 // Tip returns the current tip block node for the chain view.  It will return
@@ -132,19 +132,19 @@ func (c *chainView) setTip(node *blockNode) {
 	// week.
 	needed := node.height + 1
 	if int32(cap(c.nodes)) < needed {
-		nodes := make([]*blockNode, needed, needed+approxNodesPerWeek)
+		nodes := make([]blockPtr, needed, needed+approxNodesPerWeek)
 		copy(nodes, c.nodes)
 		c.nodes = nodes
 	} else {
 		prevLen := int32(len(c.nodes))
 		c.nodes = c.nodes[0:needed]
 		for i := prevLen; i < needed; i++ {
-			c.nodes[i] = nil
+			c.nodes[i] = 0
 		}
 	}
 
-	for node != nil && c.nodes[node.height] != node {
-		c.nodes[node.height] = node
+	for node != nil && c.nodes[node.height] != node.self {
+		c.nodes[node.height] = node.self
 		node = c.index.Parent(node)
 	}
 }
@@ -194,7 +194,7 @@ func (c *chainView) nodeByHeight(height int32) *blockNode {
 		return nil
 	}
 
-	return c.nodes[height]
+	return c.index.Node(c.nodes[height])
 }
 
 // NodeByHeight returns the block node at the specified height.  Nil will be
@@ -227,7 +227,8 @@ func (c *chainView) Equals(other *chainView) bool {
 //
 // This function MUST be called with the view mutex locked (for reads).
 func (c *chainView) contains(node *blockNode) bool {
-	return c.nodeByHeight(node.height) == node
+	viewNode := c.nodeByHeight(node.height)
+	return viewNode != nil && viewNode.self == node.self
 }
 
 // Contains returns whether or not the chain view contains the passed block
@@ -396,7 +397,7 @@ func (c *chainView) blockLocator(node *blockNode) BlockLocator {
 		// that case.  Otherwise, fall back to walking backwards through
 		// the nodes of the other chain to the correct ancestor.
 		if c.contains(node) {
-			node = c.nodes[height]
+			node = c.index.Node(c.nodes[height])
 		} else {
 			node = c.index.Ancestor(node, height)
 		}
