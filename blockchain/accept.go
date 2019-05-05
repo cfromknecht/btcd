@@ -29,7 +29,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	if prevNode == nil {
 		str := fmt.Sprintf("previous block %s is unknown", prevHash)
 		return false, ruleError(ErrPreviousBlockUnknown, str)
-	} else if b.index.NodeStatus(prevNode).KnownInvalid() {
+	} else if b.index.NodeStatus(prevNode.self).KnownInvalid() {
 		str := fmt.Sprintf("previous block %s is known to be invalid", prevHash)
 		return false, ruleError(ErrInvalidAncestorBlock, str)
 	}

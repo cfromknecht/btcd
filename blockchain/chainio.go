@@ -1232,7 +1232,9 @@ func (b *BlockChain) initChainState() error {
 					"upgrading to valid for consistency",
 					iterNode.hash, iterNode.height)
 
-				b.index.SetStatusFlags(iterNode, statusValid)
+				b.index.SetStatusFlags(
+					iterNode.self, statusValid,
+				)
 			}
 		}
 

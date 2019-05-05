@@ -820,11 +820,11 @@ func TestHeightToHashRange(t *testing.T) {
 	branch0Nodes := chainedNodes(chain.index, chain.bestChain.Genesis(), 18)
 	branch1Nodes := chainedNodes(chain.index, branch0Nodes[14], 3)
 	for _, node := range branch0Nodes {
-		chain.index.SetStatusFlags(node, statusValid)
+		chain.index.SetStatusFlags(node.self, statusValid)
 	}
 	for _, node := range branch1Nodes {
 		if node.height < 18 {
-			chain.index.SetStatusFlags(node, statusValid)
+			chain.index.SetStatusFlags(node.self, statusValid)
 		}
 	}
 	chain.bestChain.SetTip(tip(branch0Nodes))
@@ -910,11 +910,11 @@ func TestIntervalBlockHashes(t *testing.T) {
 	branch0Nodes := chainedNodes(chain.index, chain.bestChain.Genesis(), 18)
 	branch1Nodes := chainedNodes(chain.index, branch0Nodes[14], 3)
 	for _, node := range branch0Nodes {
-		chain.index.SetStatusFlags(node, statusValid)
+		chain.index.SetStatusFlags(node.self, statusValid)
 	}
 	for _, node := range branch1Nodes {
 		if node.height < 18 {
-			chain.index.SetStatusFlags(node, statusValid)
+			chain.index.SetStatusFlags(node.self, statusValid)
 		}
 	}
 	chain.bestChain.SetTip(tip(branch0Nodes))

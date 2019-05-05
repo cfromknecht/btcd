@@ -507,9 +507,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	// Do not reorganize to a known invalid chain. Ancestors deeper than the
 	// direct parent are checked below but this is a quick check before doing
 	// more unnecessary work.
-	parent := b.index.Parent(node)
-	if b.index.NodeStatus(parent).KnownInvalid() {
-		b.index.SetStatusFlags(node, statusInvalidAncestor)
+	if b.index.NodeStatus(node.parent).KnownInvalid() {
+		b.index.SetStatusFlags(node.self, statusInvalidAncestor)
 		return detachNodes, attachNodes
 	}
 
@@ -520,7 +519,7 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	forkNode := b.bestChain.FindFork(node)
 	invalidChain := false
 	for n := node; n != nil && n != forkNode; n = b.index.Parent(n) {
-		if b.index.NodeStatus(n).KnownInvalid() {
+		if b.index.NodeStatus(n.self).KnownInvalid() {
 			invalidChain = true
 			break
 		}
@@ -534,7 +533,7 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 		for e := attachNodes.Front(); e != nil; e = next {
 			next = e.Next()
 			n := attachNodes.Remove(e).(*blockNode)
-			b.index.SetStatusFlags(n, statusInvalidAncestor)
+			b.index.SetStatusFlags(n.self, statusInvalidAncestor)
 		}
 		return detachNodes, attachNodes
 	}
@@ -956,7 +955,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		// Skip checks if node has already been fully validated. Although
 		// checkConnectBlock gets skipped, we still need to update the UTXO
 		// view.
-		if b.index.NodeStatus(n).KnownValid() {
+		if b.index.NodeStatus(n.self).KnownValid() {
 			err = view.fetchInputUtxos(b.db, block)
 			if err != nil {
 				return err
@@ -981,15 +980,19 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 		err = b.checkConnectBlock(n, block, view, nil)
 		if err != nil {
 			if _, ok := err.(RuleError); ok {
-				b.index.SetStatusFlags(n, statusValidateFailed)
+				b.index.SetStatusFlags(
+					n.self, statusValidateFailed,
+				)
 				for de := e.Next(); de != nil; de = de.Next() {
 					dn := de.Value.(*blockNode)
-					b.index.SetStatusFlags(dn, statusInvalidAncestor)
+					b.index.SetStatusFlags(
+						dn.self, statusInvalidAncestor,
+					)
 				}
 			}
 			return err
 		}
-		b.index.SetStatusFlags(n, statusValid)
+		b.index.SetStatusFlags(n.self, statusValid)
 
 		newBest = n
 	}
@@ -1105,7 +1108,7 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 	parentHash := &block.MsgBlock().Header.PrevBlock
 	if parentHash.IsEqual(&b.bestChain.Tip().hash) {
 		// Skip checks if node has already been fully validated.
-		fastAdd = fastAdd || b.index.NodeStatus(node).KnownValid()
+		fastAdd = fastAdd || b.index.NodeStatus(node.self).KnownValid()
 
 		// Perform several checks to verify the block can be connected
 		// to the main chain without violating any rules and without
@@ -1116,9 +1119,11 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 		if !fastAdd {
 			err := b.checkConnectBlock(node, block, view, &stxos)
 			if err == nil {
-				b.index.SetStatusFlags(node, statusValid)
+				b.index.SetStatusFlags(node.self, statusValid)
 			} else if _, ok := err.(RuleError); ok {
-				b.index.SetStatusFlags(node, statusValidateFailed)
+				b.index.SetStatusFlags(
+					node.self, statusValidateFailed,
+				)
 			} else {
 				return false, err
 			}
@@ -1153,7 +1158,7 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 			// index state to disk before returning with the error.
 			if _, ok := err.(RuleError); ok {
 				b.index.SetStatusFlags(
-					node, statusValidateFailed,
+					node.self, statusValidateFailed,
 				)
 			}
 
@@ -1165,8 +1170,8 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *btcutil.Block, fla
 		// If this is fast add, or this block node isn't yet marked as
 		// valid, then we'll update its status and flush the state to
 		// disk again.
-		if fastAdd || !b.index.NodeStatus(node).KnownValid() {
-			b.index.SetStatusFlags(node, statusValid)
+		if fastAdd || !b.index.NodeStatus(node.self).KnownValid() {
+			b.index.SetStatusFlags(node.self, statusValid)
 			flushIndexState()
 		}
 
@@ -1408,7 +1413,7 @@ func (b *BlockChain) HeightToHashRange(startHeight int32,
 	if endNode == nil {
 		return nil, fmt.Errorf("no known block header with hash %v", endHash)
 	}
-	if !b.index.NodeStatus(endNode).KnownValid() {
+	if !b.index.NodeStatus(endNode.self).KnownValid() {
 		return nil, fmt.Errorf("block %v is not yet validated", endHash)
 	}
 	endHeight := endNode.height
@@ -1448,7 +1453,7 @@ func (b *BlockChain) IntervalBlockHashes(endHash *chainhash.Hash, interval int,
 	if endNode == nil {
 		return nil, fmt.Errorf("no known block header with hash %v", endHash)
 	}
-	if !b.index.NodeStatus(endNode).KnownValid() {
+	if !b.index.NodeStatus(endNode.self).KnownValid() {
 		return nil, fmt.Errorf("block %v is not yet validated", endHash)
 	}
 	endHeight := endNode.height
