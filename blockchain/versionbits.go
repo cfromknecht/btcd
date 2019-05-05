@@ -113,7 +113,8 @@ func (c bitConditionChecker) Condition(node *blockNode) (bool, error) {
 		return false, nil
 	}
 
-	expectedVersion, err := c.chain.calcNextBlockVersion(node.parent)
+	parent := c.chain.index.Parent(node)
+	expectedVersion, err := c.chain.calcNextBlockVersion(parent)
 	if err != nil {
 		return false, err
 	}
@@ -238,10 +239,11 @@ func (b *BlockChain) CalcNextBlockVersion() (int32, error) {
 func (b *BlockChain) warnUnknownRuleActivations(node *blockNode) error {
 	// Warn if any unknown new rules are either about to activate or have
 	// already been activated.
+	parent := b.index.Parent(node)
 	for bit := uint32(0); bit < vbNumBits; bit++ {
 		checker := bitConditionChecker{bit: bit, chain: b}
 		cache := &b.warningCaches[bit]
-		state, err := b.thresholdState(node.parent, checker, cache)
+		state, err := b.thresholdState(parent, checker, cache)
 		if err != nil {
 			return err
 		}
@@ -278,7 +280,8 @@ func (b *BlockChain) warnUnknownVersions(node *blockNode) error {
 	// Warn if enough previous blocks have unexpected versions.
 	numUpgraded := uint32(0)
 	for i := uint32(0); i < unknownVerNumToCheck && node != nil; i++ {
-		expectedVersion, err := b.calcNextBlockVersion(node.parent)
+		parent := b.index.Parent(node)
+		expectedVersion, err := b.calcNextBlockVersion(parent)
 		if err != nil {
 			return err
 		}
@@ -288,7 +291,7 @@ func (b *BlockChain) warnUnknownVersions(node *blockNode) error {
 			numUpgraded++
 		}
 
-		node = node.parent
+		node = parent
 	}
 	if numUpgraded > unknownVerWarnNum {
 		log.Warn("Unknown block versions are being mined, so new " +

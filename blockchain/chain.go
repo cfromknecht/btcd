@@ -377,7 +377,8 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *btcutil.Tx, utxoView 
 		// Obtain the latest BIP9 version bits state for the
 		// CSV-package soft-fork deployment. The adherence of sequence
 		// locks depends on the current soft-fork state.
-		csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
+		parent := b.index.Parent(node)
+		csvState, err := b.deploymentState(parent, chaincfg.DeploymentCSV)
 		if err != nil {
 			return nil, err
 		}
@@ -506,7 +507,8 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	// Do not reorganize to a known invalid chain. Ancestors deeper than the
 	// direct parent are checked below but this is a quick check before doing
 	// more unnecessary work.
-	if b.index.NodeStatus(node.parent).KnownInvalid() {
+	parent := b.index.Parent(node)
+	if b.index.NodeStatus(parent).KnownInvalid() {
 		b.index.SetStatusFlags(node, statusInvalidAncestor)
 		return detachNodes, attachNodes
 	}
@@ -517,7 +519,7 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	// later.
 	forkNode := b.bestChain.FindFork(node)
 	invalidChain := false
-	for n := node; n != nil && n != forkNode; n = n.parent {
+	for n := node; n != nil && n != forkNode; n = b.index.Parent(n) {
 		if b.index.NodeStatus(n).KnownInvalid() {
 			invalidChain = true
 			break
@@ -540,7 +542,7 @@ func (b *BlockChain) getReorganizeNodes(node *blockNode) (*list.List, *list.List
 	// Start from the end of the main chain and work backwards until the
 	// common ancestor adding each block to the list of nodes to detach from
 	// the main chain.
-	for n := b.bestChain.Tip(); n != nil && n != forkNode; n = n.parent {
+	for n := b.bestChain.Tip(); n != nil && n != forkNode; n = b.index.Parent(n) {
 		detachNodes.PushBack(n)
 	}
 
@@ -691,7 +693,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *btcutil.Block, view
 	}
 
 	// Load the previous block since some details for it are needed below.
-	prevNode := node.parent
+	prevNode := b.index.Parent(node)
 	var prevBlock *btcutil.Block
 	err := b.db.View(func(dbTx database.Tx) error {
 		var err error
@@ -777,7 +779,7 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *btcutil.Block, view
 	view.commit()
 
 	// This node's parent is now the end of the best chain.
-	b.bestChain.SetTip(node.parent)
+	b.bestChain.SetTip(b.index.Parent(node))
 
 	// Update the state for the best block.  Notice how this replaces the
 	// entire struct instead of updating the existing one.  This effectively
@@ -840,11 +842,13 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 	if attachNodes.Len() != 0 && detachNodes.Len() != 0 {
 		firstAttachNode := attachNodes.Front().Value.(*blockNode)
 		lastDetachNode := detachNodes.Back().Value.(*blockNode)
-		if firstAttachNode.parent.hash != lastDetachNode.parent.hash {
+		firstAttachParent := b.index.Parent(firstAttachNode)
+		lastDetachParent := b.index.Parent(lastDetachNode)
+		if firstAttachParent.hash != lastDetachParent.hash {
 			return AssertError(fmt.Sprintf("reorganize nodes do not have the "+
 				"same fork point -- first attach parent %v, last detach "+
-				"parent %v", &firstAttachNode.parent.hash,
-				&lastDetachNode.parent.hash))
+				"parent %v", &firstAttachParent.hash,
+				&lastDetachParent.hash))
 		}
 	}
 
@@ -911,7 +915,7 @@ func (b *BlockChain) reorganizeChain(detachNodes, attachNodes *list.List) error 
 			return err
 		}
 
-		newBest = n.parent
+		newBest = b.index.Parent(n)
 	}
 
 	// Set the fork point only if there are nodes to attach since otherwise
@@ -1428,7 +1432,7 @@ func (b *BlockChain) HeightToHashRange(startHeight int32,
 	hashes := make([]chainhash.Hash, resultsLength)
 	for i := resultsLength - 1; i >= 0; i-- {
 		hashes[i] = node.hash
-		node = node.parent
+		node = b.index.Parent(node)
 	}
 	return hashes, nil
 }

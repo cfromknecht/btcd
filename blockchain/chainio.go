@@ -1226,7 +1226,7 @@ func (b *BlockChain) initChainState() error {
 		// them as valid if they aren't already marked as such.  This
 		// is a safe assumption as all the block before the current tip
 		// are valid by definition.
-		for iterNode := tip; iterNode != nil; iterNode = iterNode.parent {
+		for iterNode := tip; iterNode != nil; iterNode = b.index.Parent(iterNode) {
 			// If this isn't already marked as valid in the index, then
 			// we'll mark it as valid now to ensure consistency once
 			// we're up and running.

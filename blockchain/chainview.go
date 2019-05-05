@@ -145,7 +145,7 @@ func (c *chainView) setTip(node *blockNode) {
 
 	for node != nil && c.nodes[node.height] != node {
 		c.nodes[node.height] = node
-		node = node.parent
+		node = c.index.Parent(node)
 	}
 }
 
@@ -315,7 +315,7 @@ func (c *chainView) findFork(node *blockNode) *blockNode {
 	// contain the node or there are no more nodes in which case there is no
 	// common node between the two.
 	for node != nil && !c.contains(node) {
-		node = node.parent
+		node = c.index.Parent(node)
 	}
 
 	return node
