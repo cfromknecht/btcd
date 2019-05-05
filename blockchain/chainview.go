@@ -308,7 +308,7 @@ func (c *chainView) findFork(node *blockNode) *blockNode {
 	// the Ancestor function such as using an O(log n) skip list.
 	chainHeight := c.height()
 	if node.height > chainHeight {
-		node = node.Ancestor(chainHeight)
+		node = c.index.Ancestor(node, chainHeight)
 	}
 
 	// Walk the other chain backwards as long as the current one does not
@@ -398,7 +398,7 @@ func (c *chainView) blockLocator(node *blockNode) BlockLocator {
 		if c.contains(node) {
 			node = c.nodes[height]
 		} else {
-			node = node.Ancestor(height)
+			node = c.index.Ancestor(node, height)
 		}
 
 		// Once 11 entries have been included, start doubling the

@@ -440,7 +440,7 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *btcutil.Tx, utxoView 
 			if prevInputHeight < 0 {
 				prevInputHeight = 0
 			}
-			blockNode := node.Ancestor(prevInputHeight)
+			blockNode := b.index.Ancestor(node, prevInputHeight)
 			medianTime := blockNode.CalcPastMedianTime()
 
 			// Time based relative time-locks as defined by BIP 68
@@ -1467,7 +1467,7 @@ func (b *BlockChain) IntervalBlockHashes(endHash *chainhash.Hash, interval int,
 		if b.bestChain.contains(blockNode) {
 			blockNode = b.bestChain.nodeByHeight(blockHeight)
 		} else {
-			blockNode = blockNode.Ancestor(blockHeight)
+			blockNode = b.index.Ancestor(blockNode, blockHeight)
 		}
 
 		hashes[index-1] = blockNode.hash
