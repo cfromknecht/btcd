@@ -163,7 +163,8 @@ func TestCalcSequenceLock(t *testing.T) {
 	// Obtain the median time past from the PoV of the input created above.
 	// The MTP for the input is the MTP from the PoV of the block *prior*
 	// to the one that included it.
-	medianTime := node.RelativeAncestor(5).CalcPastMedianTime().Unix()
+	ancestor := chain.index.RelativeAncestor(node, 5)
+	medianTime := ancestor.CalcPastMedianTime().Unix()
 
 	// The median time calculated from the PoV of the best block in the
 	// test chain.  For unconfirmed inputs, this value will be used since
