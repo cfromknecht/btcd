@@ -40,6 +40,7 @@ import (
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/websocket"
 )
@@ -1049,7 +1050,7 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 	max := blockchain.CompactToBig(params.PowLimitBits)
 	target := blockchain.CompactToBig(bits)
 
-	difficulty := new(big.Rat).SetFrac(max, target)
+	difficulty := new(big.Rat).SetFrac(max.Int(), target.Int())
 	outString := difficulty.FloatString(8)
 	diff, err := strconv.ParseFloat(outString, 64)
 	if err != nil {
@@ -2433,7 +2434,7 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// Find the min and max block timestamps as well as calculate the total
 	// amount of work that happened between the start and end blocks.
 	var minTimestamp, maxTimestamp time.Time
-	totalWork := big.NewInt(0)
+	var totalWork work.UInt256
 	for curHeight := startHeight; curHeight <= endHeight; curHeight++ {
 		hash, err := s.cfg.Chain.BlockHashByHeight(curHeight)
 		if err != nil {
@@ -2452,7 +2453,8 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 			minTimestamp = header.Timestamp
 			maxTimestamp = minTimestamp
 		} else {
-			totalWork.Add(totalWork, blockchain.CalcWork(header.Bits))
+			blockWork := blockchain.CalcWork(header.Bits)
+			totalWork.Add(&blockWork)
 
 			if minTimestamp.After(header.Timestamp) {
 				minTimestamp = header.Timestamp
@@ -2466,12 +2468,13 @@ func handleGetNetworkHashPS(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	// Calculate the difference in seconds between the min and max block
 	// timestamps and avoid division by zero in the case where there is no
 	// time difference.
-	timeDiff := int64(maxTimestamp.Sub(minTimestamp) / time.Second)
+	timeDiff := uint64(maxTimestamp.Sub(minTimestamp) / time.Second)
 	if timeDiff == 0 {
-		return int64(0), nil
+		return 0, nil
 	}
+	timeDiff256 := work.UInt256FromUint64(timeDiff)
 
-	hashesPerSec := new(big.Int).Div(totalWork, big.NewInt(timeDiff))
+	hashesPerSec := new(work.UInt256).Set(&totalWork).Div(&timeDiff256)
 	return hashesPerSec.Int64(), nil
 }
 
@@ -4281,7 +4284,7 @@ func newRPCServer(config *rpcserverConfig) (*rpcServer, error) {
 		gbtWorkState:           newGbtWorkState(config.TimeSource),
 		helpCacher:             newHelpCacher(),
 		requestProcessShutdown: make(chan struct{}),
-		quit: make(chan int),
+		quit:                   make(chan int),
 	}
 	if cfg.RPCUser != "" && cfg.RPCPass != "" {
 		login := cfg.RPCUser + ":" + cfg.RPCPass

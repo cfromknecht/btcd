@@ -6,12 +6,12 @@ package blockchain_test
 
 import (
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/database"
 	_ "github.com/btcsuite/btcd/database/ffldb"
 	"github.com/btcsuite/btcutil"
@@ -93,11 +93,12 @@ func ExampleBigToCompact() {
 	// Convert the target difficulty from block 300000 in the main block
 	// chain to compact form.
 	t := "0000000000000000896c00000000000000000000000000000000000000000000"
-	targetDifficulty, success := new(big.Int).SetString(t, 16)
-	if !success {
-		fmt.Println("invalid target difficulty")
+	targetHash, err := chainhash.NewHashFromStr(t)
+	if err != nil {
+		fmt.Printf("invalid target difficulty: %v\n", err)
 		return
 	}
+	targetDifficulty := blockchain.HashToBig(targetHash)
 	bits := blockchain.BigToCompact(targetDifficulty)
 
 	fmt.Println(bits)

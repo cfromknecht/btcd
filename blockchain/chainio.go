@@ -8,13 +8,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/database"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 	"github.com/btcsuite/btcutil"
 )
 
@@ -921,15 +921,14 @@ type bestChainState struct {
 	hash      chainhash.Hash
 	height    uint32
 	totalTxns uint64
-	workSum   *big.Int
+	workSum   work.UInt256
 }
 
 // serializeBestChainState returns the serialization of the passed block best
 // chain state.  This is data to be stored in the chain state bucket.
 func serializeBestChainState(state bestChainState) []byte {
 	// Calculate the full size needed to serialize the chain state.
-	workSumBytes := state.workSum.Bytes()
-	workSumBytesLen := uint32(len(workSumBytes))
+	workSumBytesLen := state.workSum.NBytes()
 	serializedLen := chainhash.HashSize + 4 + 8 + 4 + workSumBytesLen
 
 	// Serialize the chain state.
@@ -940,9 +939,9 @@ func serializeBestChainState(state bestChainState) []byte {
 	offset += 4
 	byteOrder.PutUint64(serializedData[offset:], state.totalTxns)
 	offset += 8
-	byteOrder.PutUint32(serializedData[offset:], workSumBytesLen)
+	byteOrder.PutUint32(serializedData[offset:], uint32(workSumBytesLen))
 	offset += 4
-	copy(serializedData[offset:], workSumBytes)
+	state.workSum.Write(serializedData[offset:])
 	return serializedData[:]
 }
 
@@ -979,20 +978,20 @@ func deserializeBestChainState(serializedData []byte) (bestChainState, error) {
 		}
 	}
 	workSumBytes := serializedData[offset : offset+workSumBytesLen]
-	state.workSum = new(big.Int).SetBytes(workSumBytes)
+	state.workSum.Read(workSumBytes)
 
 	return state, nil
 }
 
 // dbPutBestState uses an existing database transaction to update the best chain
 // state with the given parameters.
-func dbPutBestState(dbTx database.Tx, snapshot *BestState, workSum *big.Int) error {
+func dbPutBestState(dbTx database.Tx, snapshot *BestState, workSum *work.UInt256) error {
 	// Serialize the current best chain state.
 	serializedData := serializeBestChainState(bestChainState{
 		hash:      snapshot.Hash,
 		height:    uint32(snapshot.Height),
 		totalTxns: snapshot.TotalTxns,
-		workSum:   workSum,
+		workSum:   *workSum,
 	})
 
 	// Store the current best chain state into the database.
@@ -1087,7 +1086,7 @@ func (b *BlockChain) createChainState() error {
 		}
 
 		// Store the current best chain state into the database.
-		err = dbPutBestState(dbTx, b.stateSnapshot, node.workSum)
+		err = dbPutBestState(dbTx, b.stateSnapshot, &node.workSum)
 		if err != nil {
 			return err
 		}

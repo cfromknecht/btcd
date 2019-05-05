@@ -5,7 +5,6 @@
 package blockchain
 
 import (
-	"math/big"
 	"sort"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/database"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 )
 
 // blockStatus is a bit field representing the validation state of the block.
@@ -79,7 +79,7 @@ type blockNode struct {
 
 	// workSum is the total amount of work in the chain up to and including
 	// this node.
-	workSum *big.Int
+	workSum work.UInt256
 
 	// height is the position in the block chain.
 	height int32
@@ -118,7 +118,7 @@ func initBlockNode(node *blockNode, blockHeader *wire.BlockHeader, parent *block
 	if parent != nil {
 		node.parent = parent
 		node.height = parent.height + 1
-		node.workSum = node.workSum.Add(parent.workSum, node.workSum)
+		node.workSum = *node.workSum.Add(&parent.workSum)
 	}
 }
 

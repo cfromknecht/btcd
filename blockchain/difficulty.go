@@ -5,34 +5,26 @@
 package blockchain
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/work"
 )
 
 var (
 	// bigOne is 1 represented as a big.Int.  It is defined here to avoid
 	// the overhead of creating it multiple times.
-	bigOne = big.NewInt(1)
+	bigOne = work.NewUInt256FromUint64(1)
 
 	// oneLsh256 is 1 shifted left 256 bits.  It is defined here to avoid
 	// the overhead of creating it multiple times.
-	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
+	oneLsh256 = new(work.UInt256).Set(bigOne).Lsh(256).Sub(bigOne)
 )
 
 // HashToBig converts a chainhash.Hash into a big.Int that can be used to
 // perform math comparisons.
-func HashToBig(hash *chainhash.Hash) *big.Int {
-	// A Hash is in little-endian, but the big package wants the bytes in
-	// big-endian, so reverse them.
-	buf := *hash
-	blen := len(buf)
-	for i := 0; i < blen/2; i++ {
-		buf[i], buf[blen-1-i] = buf[blen-1-i], buf[i]
-	}
-
-	return new(big.Int).SetBytes(buf[:])
+func HashToBig(hash *chainhash.Hash) *work.UInt256 {
+	return new(work.UInt256).Read(hash[:])
 }
 
 // CompactToBig converts a compact representation of a whole number N to an
@@ -58,7 +50,7 @@ func HashToBig(hash *chainhash.Hash) *big.Int {
 // This compact form is only used in bitcoin to encode unsigned 256-bit numbers
 // which represent difficulty targets, thus there really is not a need for a
 // sign bit, but it is implemented here to stay consistent with bitcoind.
-func CompactToBig(compact uint32) *big.Int {
+func CompactToBig(compact uint32) work.UInt256 {
 	// Extract the mantissa, sign bit, and exponent.
 	mantissa := compact & 0x007fffff
 	isNegative := compact&0x00800000 != 0
@@ -69,18 +61,18 @@ func CompactToBig(compact uint32) *big.Int {
 	// treat the exponent as the number of bytes and shift the mantissa
 	// right or left accordingly.  This is equivalent to:
 	// N = mantissa * 256^(exponent-3)
-	var bn *big.Int
+	var bn work.UInt256
 	if exponent <= 3 {
 		mantissa >>= 8 * (3 - exponent)
-		bn = big.NewInt(int64(mantissa))
+		bn = work.UInt256FromUint64(uint64(mantissa))
 	} else {
-		bn = big.NewInt(int64(mantissa))
-		bn.Lsh(bn, 8*(exponent-3))
+		bn = work.UInt256FromUint64(uint64(mantissa))
+		bn.Lsh(8 * (exponent - 3))
 	}
 
 	// Make it negative if the sign bit is set.
 	if isNegative {
-		bn = bn.Neg(bn)
+		bn.Neg()
 	}
 
 	return bn
@@ -90,10 +82,20 @@ func CompactToBig(compact uint32) *big.Int {
 // an unsigned 32-bit number.  The compact representation only provides 23 bits
 // of precision, so values larger than (2^23 - 1) only encode the most
 // significant digits of the number.  See CompactToBig for details.
-func BigToCompact(n *big.Int) uint32 {
+func BigToCompact(nn *work.UInt256) uint32 {
+	sign := nn.Sign()
+	var n work.UInt256
+	switch sign {
+
 	// No need to do any work if it's zero.
-	if n.Sign() == 0 {
+	case 0:
 		return 0
+
+	case -1:
+		n.Set(nn).Neg()
+
+	default:
+		n = *nn
 	}
 
 	// Since the base for the exponent is 256, the exponent can be treated
@@ -101,14 +103,13 @@ func BigToCompact(n *big.Int) uint32 {
 	// accordingly.  This is equivalent to:
 	// mantissa = mantissa / 256^(exponent-3)
 	var mantissa uint32
-	exponent := uint(len(n.Bytes()))
+	exponent := uint(n.NBytes())
 	if exponent <= 3 {
-		mantissa = uint32(n.Bits()[0])
+		mantissa = uint32(n[0])
 		mantissa <<= 8 * (3 - exponent)
 	} else {
 		// Use a copy to avoid modifying the caller's original number.
-		tn := new(big.Int).Set(n)
-		mantissa = uint32(tn.Rsh(tn, 8*(exponent-3)).Bits()[0])
+		mantissa = uint32(n.Rsh(8 * (exponent - 3))[0])
 	}
 
 	// When the mantissa already has the sign bit set, the number is too
@@ -122,7 +123,7 @@ func BigToCompact(n *big.Int) uint32 {
 	// Pack the exponent, sign bit, and mantissa into an unsigned 32-bit
 	// int and return it.
 	compact := uint32(exponent<<24) | mantissa
-	if n.Sign() < 0 {
+	if sign < 0 /* && (compact&0x007fffff > 0) */ {
 		compact |= 0x00800000
 	}
 	return compact
@@ -138,18 +139,19 @@ func BigToCompact(n *big.Int) uint32 {
 // accumulated must be the inverse of the difficulty.  Also, in order to avoid
 // potential division by zero and really small floating point numbers, the
 // result adds 1 to the denominator and multiplies the numerator by 2^256.
-func CalcWork(bits uint32) *big.Int {
+func CalcWork(bits uint32) work.UInt256 {
 	// Return a work value of zero if the passed difficulty bits represent
 	// a negative number. Note this should not happen in practice with valid
 	// blocks, but an invalid block could trigger it.
 	difficultyNum := CompactToBig(bits)
 	if difficultyNum.Sign() <= 0 {
-		return big.NewInt(0)
+		return work.UInt256{}
 	}
 
 	// (1 << 256) / (difficultyNum + 1)
-	denominator := new(big.Int).Add(difficultyNum, bigOne)
-	return new(big.Int).Div(oneLsh256, denominator)
+	denominator := difficultyNum.Inc()
+	ret := new(work.UInt256).Set(oneLsh256)
+	return *ret.Div(denominator)
 }
 
 // calcEasiestDifficulty calculates the easiest possible difficulty that a block
@@ -159,7 +161,9 @@ func CalcWork(bits uint32) *big.Int {
 func (b *BlockChain) calcEasiestDifficulty(bits uint32, duration time.Duration) uint32 {
 	// Convert types used in the calculations below.
 	durationVal := int64(duration / time.Second)
-	adjustmentFactor := big.NewInt(b.chainParams.RetargetAdjustmentFactor)
+	adjustmentFactor := work.NewUInt256FromUint64(
+		uint64(b.chainParams.RetargetAdjustmentFactor),
+	)
 
 	// The test network rules allow minimum difficulty blocks after more
 	// than twice the desired amount of time needed to generate a block has
@@ -178,16 +182,16 @@ func (b *BlockChain) calcEasiestDifficulty(bits uint32, duration time.Duration) 
 	// multiplied by the max adjustment factor.
 	newTarget := CompactToBig(bits)
 	for durationVal > 0 && newTarget.Cmp(b.chainParams.PowLimit) < 0 {
-		newTarget.Mul(newTarget, adjustmentFactor)
+		newTarget.Mul(adjustmentFactor)
 		durationVal -= b.maxRetargetTimespan
 	}
 
 	// Limit new value to the proof of work limit.
 	if newTarget.Cmp(b.chainParams.PowLimit) > 0 {
-		newTarget.Set(b.chainParams.PowLimit)
+		newTarget = *b.chainParams.PowLimit
 	}
 
-	return BigToCompact(newTarget)
+	return BigToCompact(&newTarget)
 }
 
 // findPrevTestNetDifficulty returns the difficulty of the previous block which
@@ -274,9 +278,10 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	// rounded down.  Bitcoind also uses integer division to calculate this
 	// result.
 	oldTarget := CompactToBig(lastNode.bits)
-	newTarget := new(big.Int).Mul(oldTarget, big.NewInt(adjustedTimespan))
-	targetTimeSpan := int64(b.chainParams.TargetTimespan / time.Second)
-	newTarget.Div(newTarget, big.NewInt(targetTimeSpan))
+	newTarget := new(work.UInt256).Set(&oldTarget)
+	newTarget.Mul(work.NewUInt256FromUint64(uint64(adjustedTimespan)))
+	targetTimeSpan := uint64(b.chainParams.TargetTimespan / time.Second)
+	newTarget.Div(work.NewUInt256FromUint64(targetTimeSpan))
 
 	// Limit new value to the proof of work limit.
 	if newTarget.Cmp(b.chainParams.PowLimit) > 0 {

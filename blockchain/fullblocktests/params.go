@@ -6,12 +6,12 @@ package fullblocktests
 
 import (
 	"encoding/hex"
-	"math/big"
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 )
 
 // newHashFromStr converts the passed big-endian hex string into a
@@ -41,11 +41,11 @@ func fromHex(s string) []byte {
 var (
 	// bigOne is 1 represented as a big.Int.  It is defined here to avoid
 	// the overhead of creating it multiple times.
-	bigOne = big.NewInt(1)
+	bigOne = work.NewUInt256FromUint64(1)
 
 	// regressionPowLimit is the highest proof of work value a Bitcoin block
 	// can have for the regression test network.  It is the value 2^255 - 1.
-	regressionPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
+	regressionPowLimit = new(work.UInt256).Set(bigOne).Lsh(255).Sub(bigOne)
 
 	// regTestGenesisBlock defines the genesis block of the block chain which serves
 	// as the public transaction ledger for the regression test network.

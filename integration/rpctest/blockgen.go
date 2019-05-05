@@ -7,7 +7,6 @@ package rpctest
 import (
 	"errors"
 	"math"
-	"math/big"
 	"runtime"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 	"github.com/btcsuite/btcutil"
 )
 
@@ -23,7 +23,7 @@ import (
 // to a value less than the target difficulty. When a successful solution is
 // found true is returned and the nonce field of the passed header is updated
 // with the solution. False is returned if no solution exists.
-func solveBlock(header *wire.BlockHeader, targetDifficulty *big.Int) bool {
+func solveBlock(header *wire.BlockHeader, targetDifficulty *work.UInt256) bool {
 	// sbResult is used by the solver goroutines to send results.
 	type sbResult struct {
 		found bool

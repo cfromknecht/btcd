@@ -5,8 +5,9 @@
 package blockchain
 
 import (
-	"math/big"
 	"testing"
+
+	"github.com/btcsuite/btcd/work"
 )
 
 // TestBigToCompact ensures BigToCompact converts big integers to the expected
@@ -21,7 +22,13 @@ func TestBigToCompact(t *testing.T) {
 	}
 
 	for x, test := range tests {
-		n := big.NewInt(test.in)
+		var n *work.UInt256
+		if test.in < 0 {
+			n = work.NewUInt256FromUint64(uint64(-test.in))
+			n.Neg()
+		} else {
+			n = work.NewUInt256FromUint64(uint64(test.in))
+		}
 		r := BigToCompact(n)
 		if r != test.out {
 			t.Errorf("TestBigToCompact test #%d failed: got %d want %d\n",
@@ -39,11 +46,18 @@ func TestCompactToBig(t *testing.T) {
 		out int64
 	}{
 		{10000000, 0},
+		{25231360, -1},
 	}
 
 	for x, test := range tests {
 		n := CompactToBig(test.in)
-		want := big.NewInt(test.out)
+		var want *work.UInt256
+		if test.out < 0 {
+			want = work.NewUInt256FromUint64(uint64(-test.out))
+			want.Neg()
+		} else {
+			want = work.NewUInt256FromUint64(uint64(test.out))
+		}
 		if n.Cmp(want) != 0 {
 			t.Errorf("TestCompactToBig test #%d failed: got %d want %d\n",
 				x, n.Int64(), want.Int64())

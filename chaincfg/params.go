@@ -7,12 +7,12 @@ package chaincfg
 import (
 	"errors"
 	"math"
-	"math/big"
 	"strings"
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/work"
 )
 
 // These variables are the chain proof-of-work limit parameters for each default
@@ -20,24 +20,24 @@ import (
 var (
 	// bigOne is 1 represented as a big.Int.  It is defined here to avoid
 	// the overhead of creating it multiple times.
-	bigOne = big.NewInt(1)
+	bigOne = work.NewUInt256FromUint64(1)
 
 	// mainPowLimit is the highest proof of work value a Bitcoin block can
 	// have for the main network.  It is the value 2^224 - 1.
-	mainPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 224), bigOne)
+	mainPowLimit = work.NewUInt256FromUint64(1).Lsh(224).Sub(bigOne)
 
 	// regressionPowLimit is the highest proof of work value a Bitcoin block
 	// can have for the regression test network.  It is the value 2^255 - 1.
-	regressionPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
+	regressionPowLimit = work.NewUInt256FromUint64(1).Lsh(255).Sub(bigOne)
 
 	// testNet3PowLimit is the highest proof of work value a Bitcoin block
 	// can have for the test network (version 3).  It is the value
 	// 2^224 - 1.
-	testNet3PowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 224), bigOne)
+	testNet3PowLimit = work.NewUInt256FromUint64(1).Lsh(224).Sub(bigOne)
 
 	// simNetPowLimit is the highest proof of work value a Bitcoin block
 	// can have for the simulation test network.  It is the value 2^255 - 1.
-	simNetPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
+	simNetPowLimit = work.NewUInt256FromUint64(1).Lsh(255).Sub(bigOne)
 )
 
 // Checkpoint identifies a known good point in the block chain.  Using
@@ -128,7 +128,7 @@ type Params struct {
 
 	// PowLimit defines the highest allowed proof of work value for a block
 	// as a uint256.
-	PowLimit *big.Int
+	PowLimit *work.UInt256
 
 	// PowLimitBits defines the highest allowed proof of work value for a
 	// block in compact form.

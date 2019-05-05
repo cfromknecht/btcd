@@ -344,7 +344,7 @@ func solveBlock(header *wire.BlockHeader) bool {
 				hdr.Nonce = i
 				hash := hdr.BlockHash()
 				if blockchain.HashToBig(&hash).Cmp(
-					targetDifficulty) <= 0 {
+					&targetDifficulty) <= 0 {
 
 					results <- sbResult{true, i}
 					return
