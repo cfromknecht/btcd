@@ -1011,15 +1011,15 @@ func (b *BlockChain) createChainState() error {
 	node.status = statusDataStored | statusValid
 
 	// Add the new node to the index which is used for faster lookups.
-	b.index.addNode(node)
-	b.bestChain.SetTip(node)
+	b.index.addNode(&node)
+	b.bestChain.SetTip(&node)
 
 	// Initialize the state related to the best block.  Since it is the
 	// genesis block, use its timestamp for the median time.
 	numTxns := uint64(len(genesisBlock.MsgBlock().Transactions))
 	blockSize := uint64(genesisBlock.MsgBlock().SerializeSize())
 	blockWeight := uint64(GetBlockWeight(genesisBlock))
-	b.stateSnapshot = newBestState(node, blockSize, blockWeight, numTxns,
+	b.stateSnapshot = newBestState(&node, blockSize, blockWeight, numTxns,
 		numTxns, time.Unix(node.timestamp, 0))
 
 	// Create the initial the database chain state including creating the
@@ -1074,7 +1074,7 @@ func (b *BlockChain) createChainState() error {
 		}
 
 		// Save the genesis block to the block index database.
-		err = dbStoreBlockNode(dbTx, node, b.index.Header(node))
+		err = dbStoreBlockNode(dbTx, &node, b.index.Header(&node))
 		if err != nil {
 			return err
 		}
@@ -1156,8 +1156,6 @@ func (b *BlockChain) initChainState() error {
 		for ok := cursor.First(); ok; ok = cursor.Next() {
 			blockCount++
 		}
-		blockNodes := make([]blockNode, blockCount)
-
 		var i int32
 		var lastNode *blockNode
 		cursor = blockIndexBucket.Cursor()
@@ -1193,12 +1191,11 @@ func (b *BlockChain) initChainState() error {
 
 			// Initialize the block node for the block, connect it,
 			// and add it to the block index.
-			node := &blockNodes[i]
-			initBlockNode(node, header, parent)
+			node := newBlockNode(header, parent)
 			node.status = status
-			b.index.addNode(node)
+			b.index.addNode(&node)
 
-			lastNode = node
+			lastNode = &node
 			i++
 		}
 
