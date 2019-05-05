@@ -1748,6 +1748,7 @@ func New(config *Config) (*BlockChain, error) {
 	targetTimespan := int64(params.TargetTimespan / time.Second)
 	targetTimePerBlock := int64(params.TargetTimePerBlock / time.Second)
 	adjustmentFactor := params.RetargetAdjustmentFactor
+	index := newBlockIndex(config.DB, params)
 	b := BlockChain{
 		checkpoints:         config.Checkpoints,
 		checkpointsByHeight: checkpointsByHeight,
@@ -1759,9 +1760,9 @@ func New(config *Config) (*BlockChain, error) {
 		minRetargetTimespan: targetTimespan / adjustmentFactor,
 		maxRetargetTimespan: targetTimespan * adjustmentFactor,
 		blocksPerRetarget:   int32(targetTimespan / targetTimePerBlock),
-		index:               newBlockIndex(config.DB, params),
+		index:               index,
 		hashCache:           config.HashCache,
-		bestChain:           newChainView(nil),
+		bestChain:           newChainView(nil, index),
 		orphans:             make(map[chainhash.Hash]*orphanBlock),
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
 		warningCaches:       newThresholdCaches(vbNumBits),

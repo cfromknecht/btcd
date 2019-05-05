@@ -470,25 +470,19 @@ func TestLocateInventory(t *testing.T) {
 	// 	                              \-> 16a -> 17a
 	tip := tstTip
 	chain := newFakeChain(&chaincfg.MainNetParams)
-	branch0Nodes := chainedNodes(chain.bestChain.Genesis(), 18)
-	branch1Nodes := chainedNodes(branch0Nodes[14], 2)
-	for _, node := range branch0Nodes {
-		chain.index.AddNode(node)
-	}
-	for _, node := range branch1Nodes {
-		chain.index.AddNode(node)
-	}
+	branch0Nodes := chainedNodes(chain.index, chain.bestChain.Genesis(), 18)
+	branch1Nodes := chainedNodes(chain.index, branch0Nodes[14], 2)
 	chain.bestChain.SetTip(tip(branch0Nodes))
 
 	// Create chain views for different branches of the overall chain to
 	// simulate a local and remote node on different parts of the chain.
-	localView := newChainView(tip(branch0Nodes))
-	remoteView := newChainView(tip(branch1Nodes))
+	localView := newChainView(tip(branch0Nodes), chain.index)
+	remoteView := newChainView(tip(branch1Nodes), chain.index)
 
 	// Create a chain view for a completely unrelated block chain to
 	// simulate a remote node on a totally different chain.
-	unrelatedBranchNodes := chainedNodes(nil, 5)
-	unrelatedView := newChainView(tip(unrelatedBranchNodes))
+	unrelatedBranchNodes := chainedNodes(chain.index, nil, 5)
+	unrelatedView := newChainView(tip(unrelatedBranchNodes), chain.index)
 
 	tests := []struct {
 		name       string
@@ -810,17 +804,15 @@ func TestHeightToHashRange(t *testing.T) {
 	// 	                              \-> 16a -> 17a -> 18a (unvalidated)
 	tip := tstTip
 	chain := newFakeChain(&chaincfg.MainNetParams)
-	branch0Nodes := chainedNodes(chain.bestChain.Genesis(), 18)
-	branch1Nodes := chainedNodes(branch0Nodes[14], 3)
+	branch0Nodes := chainedNodes(chain.index, chain.bestChain.Genesis(), 18)
+	branch1Nodes := chainedNodes(chain.index, branch0Nodes[14], 3)
 	for _, node := range branch0Nodes {
 		chain.index.SetStatusFlags(node, statusValid)
-		chain.index.AddNode(node)
 	}
 	for _, node := range branch1Nodes {
 		if node.height < 18 {
 			chain.index.SetStatusFlags(node, statusValid)
 		}
-		chain.index.AddNode(node)
 	}
 	chain.bestChain.SetTip(tip(branch0Nodes))
 
@@ -902,17 +894,15 @@ func TestIntervalBlockHashes(t *testing.T) {
 	// 	                              \-> 16a -> 17a -> 18a (unvalidated)
 	tip := tstTip
 	chain := newFakeChain(&chaincfg.MainNetParams)
-	branch0Nodes := chainedNodes(chain.bestChain.Genesis(), 18)
-	branch1Nodes := chainedNodes(branch0Nodes[14], 3)
+	branch0Nodes := chainedNodes(chain.index, chain.bestChain.Genesis(), 18)
+	branch1Nodes := chainedNodes(chain.index, branch0Nodes[14], 3)
 	for _, node := range branch0Nodes {
 		chain.index.SetStatusFlags(node, statusValid)
-		chain.index.AddNode(node)
 	}
 	for _, node := range branch1Nodes {
 		if node.height < 18 {
 			chain.index.SetStatusFlags(node, statusValid)
 		}
-		chain.index.AddNode(node)
 	}
 	chain.bestChain.SetTip(tip(branch0Nodes))
 
