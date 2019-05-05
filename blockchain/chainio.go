@@ -1074,7 +1074,7 @@ func (b *BlockChain) createChainState() error {
 		}
 
 		// Save the genesis block to the block index database.
-		err = dbStoreBlockNode(dbTx, node)
+		err = dbStoreBlockNode(dbTx, node, b.index.Header(node))
 		if err != nil {
 			return err
 		}
@@ -1328,10 +1328,9 @@ func dbFetchBlockByNode(dbTx database.Tx, node *blockNode) (*btcutil.Block, erro
 
 // dbStoreBlockNode stores the block header and validation status to the block
 // index bucket. This overwrites the current entry if there exists one.
-func dbStoreBlockNode(dbTx database.Tx, node *blockNode) error {
+func dbStoreBlockNode(dbTx database.Tx, node *blockNode, header wire.BlockHeader) error {
 	// Serialize block data to be stored.
 	w := bytes.NewBuffer(make([]byte, 0, blockHdrSize+1))
-	header := node.Header()
 	err := header.Serialize(w)
 	if err != nil {
 		return err

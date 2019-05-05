@@ -134,7 +134,7 @@ func newBlockNode(blockHeader *wire.BlockHeader, parent *blockNode) *blockNode {
 // Header constructs a block header from the node and returns it.
 //
 // This function is safe for concurrent access.
-func (node *blockNode) Header() wire.BlockHeader {
+func (bi *blockIndex) Header(node *blockNode) wire.BlockHeader {
 	// No lock is needed because all accessed fields are immutable.
 	prevHash := &zeroHash
 	if node.parent != nil {
@@ -334,7 +334,7 @@ func (bi *blockIndex) flushToDB() error {
 
 	err := bi.db.Update(func(dbTx database.Tx) error {
 		for node := range bi.dirty {
-			err := dbStoreBlockNode(dbTx, node)
+			err := dbStoreBlockNode(dbTx, node, bi.Header(node))
 			if err != nil {
 				return err
 			}

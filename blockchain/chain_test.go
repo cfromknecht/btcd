@@ -127,7 +127,7 @@ func TestCalcSequenceLock(t *testing.T) {
 	// Generate enough synthetic blocks to activate CSV.
 	chain := newFakeChain(netParams)
 	node := chain.bestChain.Tip()
-	blockTime := node.Header().Timestamp
+	blockTime := chain.index.Header(node).Timestamp
 	numBlocksToActivate := (netParams.MinerConfirmationWindow * 3)
 	for i := uint32(0); i < numBlocksToActivate; i++ {
 		blockTime = blockTime.Add(time.Second)
@@ -453,10 +453,12 @@ func nodeHashes(nodes []*blockNode, indexes ...int) []chainhash.Hash {
 // nodeHeaders is a convenience function that returns the headers for all of
 // the passed indexes of the provided nodes.  It is used to construct expected
 // located headers in the tests.
-func nodeHeaders(nodes []*blockNode, indexes ...int) []wire.BlockHeader {
-	headers := make([]wire.BlockHeader, 0, len(indexes))
-	for _, idx := range indexes {
-		headers = append(headers, nodes[idx].Header())
+func nodeHeaders(index *blockIndex, nodes []*blockNode,
+	indeces ...int) []wire.BlockHeader {
+
+	headers := make([]wire.BlockHeader, 0, len(indeces))
+	for _, idx := range indeces {
+		headers = append(headers, index.Header(nodes[idx]))
 	}
 	return headers
 }
@@ -507,7 +509,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "no locators, stop in side",
 			locator:  nil,
 			hashStop: tip(branch1Nodes).hash,
-			headers:  nodeHeaders(branch1Nodes, 1),
+			headers:  nodeHeaders(chain.index, branch1Nodes, 1),
 			hashes:   nodeHashes(branch1Nodes, 1),
 		},
 		{
@@ -516,7 +518,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "no locators, stop in main",
 			locator:  nil,
 			hashStop: branch0Nodes[12].hash,
-			headers:  nodeHeaders(branch0Nodes, 12),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 12),
 			hashes:   nodeHashes(branch0Nodes, 12),
 		},
 		{
@@ -527,7 +529,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, unknown stop",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: chainhash.Hash{0x01},
-			headers:  nodeHeaders(branch0Nodes, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 15, 16, 17),
 		},
 		{
@@ -538,7 +540,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, stop in side",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: tip(branch1Nodes).hash,
-			headers:  nodeHeaders(branch0Nodes, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 15, 16, 17),
 		},
 		{
@@ -549,7 +551,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, stop in main before",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: branch0Nodes[13].hash,
-			headers:  nodeHeaders(branch0Nodes, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 15, 16, 17),
 		},
 		{
@@ -561,7 +563,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, stop in main exact",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: branch0Nodes[14].hash,
-			headers:  nodeHeaders(branch0Nodes, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 15, 16, 17),
 		},
 		{
@@ -573,7 +575,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, stop in main after",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: branch0Nodes[15].hash,
-			headers:  nodeHeaders(branch0Nodes, 15),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15),
 			hashes:   nodeHashes(branch0Nodes, 15),
 		},
 		{
@@ -585,7 +587,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote side chain, stop in main after more",
 			locator:  remoteView.BlockLocator(nil),
 			hashStop: branch0Nodes[16].hash,
-			headers:  nodeHeaders(branch0Nodes, 15, 16),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 15, 16),
 			hashes:   nodeHashes(branch0Nodes, 15, 16),
 		},
 		{
@@ -597,7 +599,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, unknown stop",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: chainhash.Hash{0x01},
-			headers:  nodeHeaders(branch0Nodes, 13, 14, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13, 14, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 13, 14, 15, 16, 17),
 		},
 		{
@@ -608,7 +610,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, stop in side",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: tip(branch1Nodes).hash,
-			headers:  nodeHeaders(branch0Nodes, 13, 14, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13, 14, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 13, 14, 15, 16, 17),
 		},
 		{
@@ -620,7 +622,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, stop in main before",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: branch0Nodes[11].hash,
-			headers:  nodeHeaders(branch0Nodes, 13, 14, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13, 14, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 13, 14, 15, 16, 17),
 		},
 		{
@@ -632,7 +634,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, stop in main exact",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: branch0Nodes[12].hash,
-			headers:  nodeHeaders(branch0Nodes, 13, 14, 15, 16, 17),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13, 14, 15, 16, 17),
 			hashes:   nodeHashes(branch0Nodes, 13, 14, 15, 16, 17),
 		},
 		{
@@ -644,7 +646,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, stop in main after",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: branch0Nodes[13].hash,
-			headers:  nodeHeaders(branch0Nodes, 13),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13),
 			hashes:   nodeHashes(branch0Nodes, 13),
 		},
 		{
@@ -656,7 +658,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote main chain past, stop in main after more",
 			locator:  localView.BlockLocator(branch0Nodes[12]),
 			hashStop: branch0Nodes[15].hash,
-			headers:  nodeHeaders(branch0Nodes, 13, 14, 15),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 13, 14, 15),
 			hashes:   nodeHashes(branch0Nodes, 13, 14, 15),
 		},
 		{
@@ -691,7 +693,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "remote unrelated chain",
 			locator:  unrelatedView.BlockLocator(nil),
 			hashStop: chainhash.Hash{},
-			headers: nodeHeaders(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
+			headers: nodeHeaders(chain.index, branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
 			hashes: nodeHashes(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
@@ -705,7 +707,7 @@ func TestLocateInventory(t *testing.T) {
 			locator:    locatorHashes(branch0Nodes, 0),
 			hashStop:   chainhash.Hash{},
 			maxAllowed: 3,
-			headers:    nodeHeaders(branch0Nodes, 1, 2, 3),
+			headers:    nodeHeaders(chain.index, branch0Nodes, 1, 2, 3),
 			hashes:     nodeHashes(branch0Nodes, 1, 2, 3),
 		},
 		{
@@ -720,7 +722,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "weak locator, single known side block",
 			locator:  locatorHashes(branch1Nodes, 1),
 			hashStop: chainhash.Hash{},
-			headers: nodeHeaders(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
+			headers: nodeHeaders(chain.index, branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
 			hashes: nodeHashes(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
@@ -737,7 +739,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "weak locator, multiple known side blocks",
 			locator:  locatorHashes(branch1Nodes, 1),
 			hashStop: chainhash.Hash{},
-			headers: nodeHeaders(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
+			headers: nodeHeaders(chain.index, branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
 			hashes: nodeHashes(branch0Nodes, 0, 1, 2, 3, 4, 5, 6,
 				7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17),
@@ -756,7 +758,7 @@ func TestLocateInventory(t *testing.T) {
 			name:     "weak locator, multiple known side blocks, stop in main",
 			locator:  locatorHashes(branch1Nodes, 1),
 			hashStop: branch0Nodes[5].hash,
-			headers:  nodeHeaders(branch0Nodes, 0, 1, 2, 3, 4, 5),
+			headers:  nodeHeaders(chain.index, branch0Nodes, 0, 1, 2, 3, 4, 5),
 			hashes:   nodeHashes(branch0Nodes, 0, 1, 2, 3, 4, 5),
 		},
 	}

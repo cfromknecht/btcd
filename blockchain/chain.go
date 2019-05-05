@@ -1279,7 +1279,7 @@ func (b *BlockChain) HeaderByHash(hash *chainhash.Hash) (wire.BlockHeader, error
 		return wire.BlockHeader{}, err
 	}
 
-	return node.Header(), nil
+	return b.index.Header(node), nil
 }
 
 // MainChainHasBlock returns whether or not the block with the given hash is in
@@ -1603,7 +1603,7 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	// Populate and return the found headers.
 	headers := make([]wire.BlockHeader, 0, total)
 	for i := uint32(0); i < total; i++ {
-		headers = append(headers, node.Header())
+		headers = append(headers, b.index.Header(node))
 		node = b.bestChain.Next(node)
 	}
 	return headers
