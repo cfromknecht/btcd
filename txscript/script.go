@@ -809,7 +809,7 @@ func GetWitnessSigOpCount(sigScript, pkScript []byte, witness wire.TxWitness) in
 		return 0
 	}
 	if IsPayToScriptHash(pkScript) && isPushOnly(sigPops) &&
-		IsWitnessProgram(sigScript[1:]) {
+		len(sigScript) > 0 && IsWitnessProgram(sigScript[1:]) {
 		return getWitnessSigOps(sigScript[1:], witness)
 	}
 
